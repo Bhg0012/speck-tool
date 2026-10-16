@@ -46,6 +46,7 @@ let jobId = 0;
 let drag = null;
 let autoHideTimer = null;
 let askedScreenPermission = false;
+let permissionWatch = null;
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -302,9 +303,28 @@ async function screenPermissionOk() {
     askedScreenPermission = true;
     return true; // the first capture attempt triggers the macOS prompt
   }
-  showError('Allow Screen Recording for Speck (Electron) in System Settings, then restart Speck', 10000);
+  showError('Turn on "Electron" in Screen Recording. Speck restarts itself once allowed (or right-click the dot, then Restart Speck)', 20000);
   shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  watchForPermission();
   return false;
+}
+
+// macOS only applies a new Screen Recording permission after a restart, so restart as soon as it's granted.
+function watchForPermission() {
+  if (permissionWatch) return;
+  const started = Date.now();
+  permissionWatch = setInterval(() => {
+    if (systemPreferences.getMediaAccessStatus('screen') === 'granted') restartApp();
+    else if (Date.now() - started > 10 * 60 * 1000) {
+      clearInterval(permissionWatch);
+      permissionWatch = null;
+    }
+  }, 1500);
+}
+
+function restartApp() {
+  app.relaunch();
+  app.exit(0);
 }
 
 async function grab(rect) {
@@ -409,6 +429,7 @@ function menuTemplate() {
     { label: 'Reset capture area', click: resetPositions },
     { label: 'Settings…', click: openSettings, ...acc('settings') },
     { type: 'separator' },
+    { label: 'Restart Speck', click: restartApp },
     { label: 'Quit Speck', click: () => app.quit() },
   ];
 }

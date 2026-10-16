@@ -3,6 +3,9 @@
 # It updates Speck from GitHub, installs what's needed, then starts it in the background.
 
 cd "$(dirname "$0")" || exit 1
+# Remember where Speck lives so Speck.app (Dock icon) can always find it.
+mkdir -p "$HOME/Library/Application Support/Speck" && pwd >"$HOME/Library/Application Support/Speck/repo-path"
+xattr -dr com.apple.quarantine . >/dev/null 2>&1
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 clear
 
