@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" width="760" height="200">
+  <title>Speck</title>
+  <g transform="translate(20 20) scale(0.3125)">
+    <rect width="512" height="512" rx="116" fill="#0A0A0C"/>
+    <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="3"/>
+    <path d="M132 204V152a20 20 0 0 1 20-20h52M380 308v52a20 20 0 0 1-20 20h-52" fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="24" fill="#7CF7D4"/>
+  </g>
+  <text x="222" y="128" font-family="Inter, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="96" font-weight="600" letter-spacing="-2" fill="#8A8A96">speck<tspan fill="#7CF7D4">.</tspan></text>
+</svg>

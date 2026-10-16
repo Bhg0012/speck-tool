@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <title>Speck</title>
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <header class="drag">
+      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
+        <rect width="512" height="512" rx="116" fill="#0A0A0C" />
+        <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="3" />
+        <path d="M132 204V152a20 20 0 0 1 20-20h52M380 308v52a20 20 0 0 1-20 20h-52" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" />
+        <circle cx="256" cy="256" r="24" fill="#7CF7D4" />
+      </svg>
+      <div>
+        <h1>speck</h1>
+        <p class="sub">Everything runs locally on this computer.</p>
+      </div>
+      <span id="saved" class="saved">saved</span>
+    </header>
+
+    <main>
+      <section>
+        <h2>Ollama</h2>
+        <div class="row">
+          <span id="ollama-dot" class="status-dot"></span>
+          <span id="ollama-text" class="muted">Checking…</span>
+          <button id="refresh" class="ghost small">Refresh</button>
+        </div>
+        <label class="field">
+          <span>Server URL</span>
+          <input id="ollamaUrl" type="text" spellcheck="false" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Models</h2>
+        <label class="field">
+          <span>Reader <em>(sees the screen; must support vision)</em></span>
+          <select id="readerModel"></select>
+        </label>
+        <label class="field">
+          <span>Solver <em>(works out the answer)</em></span>
+          <select id="solverModel"></select>
+        </label>
+        <details>
+          <summary>Download models</summary>
+          <div id="recommended" class="list"></div>
+          <div class="row">
+            <input id="custom-model" type="text" placeholder="any model, e.g. llama3.2-vision:11b" spellcheck="false" />
+            <button id="custom-pull" class="small">Download</button>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2>Accuracy</h2>
+        <div class="seg" id="mode">
+          <button data-v="fast">Fast</button>
+          <button data-v="careful">Careful</button>
+          <button data-v="max">Max</button>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+      </section>
+
+      <section>
+        <h2>Answer</h2>
+        <label class="field">
+          <span>Style</span>
+          <select id="theme">
+            <option value="dark-on-light">Dark text, light haze</option>
+            <option value="light-on-dark">Light text, dark haze</option>
+            <option value="plain-dark">Dark text, no background</option>
+            <option value="plain-light">Light text, no background</option>
+          </select>
+        </label>
+        <div class="seg" id="position">
+          <button data-v="left">Left</button>
+          <button data-v="center">Center</button>
+          <button data-v="right">Right</button>
+        </div>
+        <label class="field range">
+          <span>Text size <b id="fontSize-v"></b></span>
+          <input id="fontSize" type="range" min="9" max="16" step="1" />
+        </label>
+        <label class="field range">
+          <span>Answer opacity <b id="opacity-v"></b></span>
+          <input id="opacity" type="range" min="0.3" max="1" step="0.05" />
+        </label>
+        <label class="field range">
+          <span>Marker visibility <b id="markerOpacity-v"></b></span>
+          <input id="markerOpacity" type="range" min="0.1" max="1" step="0.05" />
+        </label>
+        <label class="field">
+          <span>Auto-hide answer</span>
+          <select id="autoHideSeconds">
+            <option value="0">Never</option>
+            <option value="5">After 5 s</option>
+            <option value="10">After 10 s</option>
+            <option value="20">After 20 s</option>
+            <option value="60">After 1 min</option>
+          </select>
+        </label>
+        <label class="toggle"><input id="showConfidence" type="checkbox" /> Show confidence (x/10)</label>
+        <label class="toggle"><input id="showStatus" type="checkbox" /> Show progress text (reading, verifying…)</label>
+      </section>
+
+      <section>
+        <h2>Hotkeys</h2>
+        <p class="hint">Click a box and press the new combination. Backspace clears it.</p>
+        <div id="hotkeys" class="list"></div>
+      </section>
+
+      <section>
+        <h2>General</h2>
+        <label class="toggle"><input id="showTray" type="checkbox" /> <span id="tray-label">Show tray icon</span></label>
+        <div class="row gap">
+          <button id="reset-area" class="ghost">Reset capture area</button>
+          <button id="quit" class="ghost danger">Quit Speck</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="muted" id="footer"></footer>
+    <script src="settings.js"></script>
+  </body>
+</html>

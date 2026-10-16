@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Speck</title>
+  <rect width="512" height="512" rx="116" fill="#0A0A0C"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="3"/>
+  <path d="M132 204V152a20 20 0 0 1 20-20h52M380 308v52a20 20 0 0 1-20 20h-52" fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="24" fill="#7CF7D4"/>
+</svg>

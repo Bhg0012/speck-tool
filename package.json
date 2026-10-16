@@ -1,0 +1,20 @@
+{
+  "name": "speck",
+  "productName": "Speck",
+  "version": "1.0.0",
+  "description": "A tiny, discreet screen helper that answers what you frame, using a local LLM via Ollama.",
+  "main": "src/main/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "launch": "node scripts/start.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^44.8.0"
+  }
+}
