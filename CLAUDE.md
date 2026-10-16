@@ -18,6 +18,11 @@ When Bruce shares a new idea, preference or insight in a chat:
 - `Speck.app/` - macOS Dock launcher (bash script bundle). Runs `scripts/start.js --quiet`; exit code 3 means
   "needs visible setup", so it opens the `.command` in Terminal.
 
+## Git workflow (Bruce's standing instruction, 2026-10-16)
+Push, open a pull request into `main`, and merge it for **every** change, without asking first.
+Use a merge commit (not squash) so the working branch stays in sync with `main`.
+`main` is what the launchers update from.
+
 ## Rules of thumb
 - Discreet first: nothing big, bright or persistent on screen; no taskbar/dock presence.
 - Accuracy first: never drop the verification step from the default mode.

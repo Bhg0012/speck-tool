@@ -119,3 +119,9 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   (a launcher bundle in the repo root with the Speck icon): click it to update and start
   Speck silently. First-time setup still opens Terminal so progress is visible. The running
   overlay keeps hiding its own Dock icon to stay discreet.
+- **2026-10-16** - Clicking the dot sent Bruce to System Settings (Screen Recording; only
+  Terminal was listed). Fix: on Mac, Speck is launched as its own app ("Electron") so it gets
+  its own permission, restarts itself once permission is granted, and has a "Restart Speck"
+  menu item.
+- **2026-10-16** - Standing instruction: push, pull request and merge every change into `main`
+  automatically, without asking (recorded in CLAUDE.md).

@@ -240,8 +240,16 @@ function pretty(acc) {
 function launch(s) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath(), [ROOT], { cwd: ROOT, detached: true, stdio: 'ignore', env });
-  child.unref();
+  if (IS_MAC) {
+    // Launch through LaunchServices so macOS treats Speck as its own app ("Electron") for
+    // Screen Recording, instead of inheriting Terminal's or Speck.app's permission.
+    // -n starts a new instance (an already-running Speck just shows itself), -g keeps focus where it is.
+    const bundle = path.resolve(electronPath(), '..', '..', '..');
+    spawnSync('open', ['-n', '-g', '-a', bundle, '--args', ROOT], { stdio: 'ignore' });
+  } else {
+    const child = spawn(electronPath(), [ROOT], { cwd: ROOT, detached: true, stdio: 'ignore', env });
+    child.unref();
+  }
   const hk = s.hotkeys;
   say();
   say(`${mint('●')} Speck is running.`);
