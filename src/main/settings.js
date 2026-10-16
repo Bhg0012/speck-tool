@@ -1,12 +1,14 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { DEFAULTS, merge } = require('../shared/defaults');
+const { DEFAULTS, merge, migrate } = require('../shared/defaults');
 
 class Settings {
   constructor(file) {
     this.file = file;
-    this.data = merge(DEFAULTS, this.read(), true);
+    const raw = this.read();
+    this.data = merge(DEFAULTS, migrate(raw), true);
+    if (raw.configVersion !== this.data.configVersion) this.save();
   }
 
   read() {

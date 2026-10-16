@@ -28,11 +28,13 @@ No dock icon, no taskbar button, no big windows.
 
 | Mac | Windows |
 | --- | --- |
-| Double-click **`Start Speck (Mac).command`** | Double-click **`Start Speck (Windows).bat`** |
+| Double-click **`Start Speck (Mac).command`** (or click **Speck** in your Dock) | Double-click **`Start Speck (Windows).bat`** |
 
 **Mac Dock icon:** in the `speck-tool` folder, drag **`Speck.app`** onto your Dock. Clicking it updates and starts Speck with no Terminal window (Terminal only opens for first-time setup or when something needs downloading). Keep `Speck.app` in the `speck-tool` folder; the Dock just points to it. Clicking it while Speck is hidden brings it back.
 
-Each launch **pulls the latest version from GitHub**, installs anything new, makes sure Ollama is running, downloads the AI model the first time (a few GB), then starts Speck in the background.
+Every launch **updates Speck to the latest version on GitHub** (all three launchers run the same `scripts/start.js`), installs anything new, makes sure Ollama is running, downloads the AI model the first time (about 6 GB), then starts Speck in the background. If an older Speck is still running, it is restarted into the new version.
+
+**Check your version:** right-click the dot. The top of the menu shows the version, when that version was published, and when Speck last checked for updates.
 
 > **Mac, first run:** macOS asks for **Screen Recording** permission (it may be listed as *Electron*). Allow it, then start Speck again.
 > If macOS blocks the `.command` file, right-click it and choose **Open**.
@@ -46,7 +48,9 @@ Each launch **pulls the latest version from GitHub**, installs anything new, mak
 | **Hide / show everything** | `⌘⌥H` | `Ctrl+Alt+H` |
 | Copy last answer | `⌘⌥C` | `Ctrl+Alt+C` |
 | Settings | `⌘⌥,` or right-click the dot | `Ctrl+Alt+,` or right-click the dot |
+| **Quit Speck** | `⌘⌥Q` or right-click the dot, then *Quit Speck* | `Ctrl+Alt+Q` or right-click the dot, then *Quit Speck* |
 
+- While Speck works, **only the dot pulses**. Nothing appears at the bottom until the answer is ready.
 - **Hover** the answer to see the full text and a short note. **Click** it to copy, **right-click** it to dismiss.
 - **Ghost mode:** while everything is hidden, the Ask hotkey still works. Only the tiny answer appears.
 - Drag the dot anywhere you like. Speck remembers the positions.
@@ -56,32 +60,31 @@ Each launch **pulls the latest version from GitHub**, installs anything new, mak
 
 Speck never trusts a single answer. In the default **Careful** mode:
 
-1. A **vision model reads** the framed area and transcribes it exactly (text, math, options, diagrams).
-2. A **solver** works out the answer step by step (hidden), returning only the final answer.
-3. An **independent checker** re-solves from scratch and compares.
-4. If they disagree, a **tie-breaker** solve decides by majority.
-5. Numeric answers are **re-computed** with a built-in calculator.
+1. The vision model **solves the framed question twice, independently** (the second time with a different method), copying the question exactly and showing short working.
+2. If the two answers disagree, a **tie-breaker** attempt decides by majority.
+3. Numeric answers are **re-computed** with a built-in calculator.
 
 The **confidence score (x/10)** reflects how many independent attempts agreed, the arithmetic re-check, the models' own certainty, and how legible the capture was. Anything below about 7 means "double-check this yourself".
 
 | Mode | What it does |
 | --- | --- |
-| Fast | One pass. Quickest. Confidence capped at 8 because it isn't verified. |
-| **Careful** (default) | Read, solve, verify, and tie-break when needed. |
-| Max (`Ctrl/⌘+Alt+D`) | Two independent solves plus verification at maximum reasoning effort. |
+| Fast | One attempt (~8 s on an M-series Mac). Confidence capped at 8 because it isn't verified. |
+| **Careful** (default) | Two independent attempts plus a tie-break when needed (~15-20 s). |
+| Max (`Ctrl/⌘+Alt+D`) | Three independent attempts plus a tie-break if there's no majority. |
+
+See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for measurements.
 
 ## Models
 
 Choose models in **Settings**. Recommended ones download with one click.
 
-| Model | Role | Notes |
-| --- | --- | --- |
-| `qwen3-vl:8b` *(default)* | Reader + solver | Excellent at reading screens, math and charts. ~6 GB. |
-| `qwen3-vl:4b` | Reader | For 8 GB machines. |
-| `gemma3:12b`, `qwen2.5vl:7b` | Reader | Alternatives. |
-| `gpt-oss:20b` | Solver | Strongest reasoning and math. Needs 16 GB+ RAM. Text-only, so it's paired with a vision reader. |
-
-The solver defaults to **Auto**: if `gpt-oss` is installed it does the reasoning, otherwise the reader model does everything.
+| Model | Notes |
+| --- | --- |
+| `qwen3-vl:8b-instruct` *(default)* | Fast and accurate at reading screens, math and charts. ~6 GB. |
+| `qwen3-vl:4b-instruct` | About twice as fast, a little less accurate. For 8 GB Macs. |
+| `qwen3-vl:8b` | "Thinking" version: more deliberate but **much** slower. |
+| `gemma3:12b` | Alternative vision model. |
+| `gpt-oss:20b` | Optional text-only solver (a vision model reads the screen for it). Slow; needs 16 GB+ RAM. |
 
 ## Privacy
 
@@ -89,7 +92,9 @@ Screenshots go only to Ollama on your own computer (`127.0.0.1`). Nothing is upl
 
 ## Troubleshooting
 
-- **"Ollama isn't running"**: open the Ollama app, or run `ollama serve`.
+- **"Ollama isn't running"**: open the Ollama app, or run `ollama serve`. (If Speck shows nothing but the dot keeps pulsing, it *is* connected and the model is working.)
+- **"The model is too slow on this computer"**: switch to Fast mode or `qwen3-vl:4b-instruct` in Settings.
+- **Not sure it updated?** Right-click the dot and check the version and date at the top.
 - **"No vision model"**: open Settings, then *Download models*, then `qwen3-vl:8b`.
 - **A hotkey doesn't work**: another app owns it. Pick a new one in Settings.
 - **Blank or wallpaper-only answers on Mac**: grant Screen Recording (System Settings, then Privacy & Security, then Screen Recording), then restart Speck.

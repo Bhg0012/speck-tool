@@ -1,7 +1,9 @@
 #!/bin/bash
 # Speck.app: click it (e.g. in the Dock) to update Speck from GitHub and start it, with no Terminal window.
-# First-time setup (installs, model download) opens "Start Speck (Mac).command" in Terminal so progress is visible.
-# Everything lives in main() so bash has read the whole script before `git pull` can update this file.
+# It runs exactly the same steps as "Start Speck (Mac).command" (scripts/start.js, which updates first).
+# When something needs you to watch or act (first install, model download, missing Node), it opens
+# that launcher in Terminal instead.
+# Everything lives in functions called from the last line, so an update can safely replace this file.
 
 SAVED="$HOME/Library/Application Support/Speck/repo-path"
 
@@ -32,10 +34,18 @@ find_repo() {
   return 1
 }
 
+alert() {
+  osascript -e 'on run argv' -e 'display alert (item 1 of argv) message (item 2 of argv)' -e 'end run' "$1" "$2" >/dev/null 2>&1
+}
+
+open_launcher() {
+  open -a Terminal "$1/Start Speck (Mac).command"
+}
+
 main() {
   local repo out code
   if ! repo="$(find_repo)"; then
-    osascript -e 'display alert "Speck" message "Couldn’t find the speck-tool folder. Double-click “Start Speck (Mac).command” inside it once, then try again."' >/dev/null 2>&1
+    alert "Speck" "Couldn’t find the speck-tool folder. Double-click “Start Speck (Mac).command” inside it once, then try again."
     return 1
   fi
   mkdir -p "$(dirname "$SAVED")" && printf '%s' "$repo" >"$SAVED"
@@ -49,21 +59,16 @@ main() {
   [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
 
   if ! command -v node >/dev/null 2>&1; then
-    open -a Terminal "$repo/Start Speck (Mac).command"
+    open_launcher "$repo"
     return 0
-  fi
-
-  if [ -d .git ] && command -v git >/dev/null 2>&1; then
-    git pull --ff-only --quiet >/dev/null 2>&1
   fi
 
   out="$(node scripts/start.js --quiet 2>&1)"
   code=$?
   if [ "$code" -eq 3 ]; then
-    open -a Terminal "$repo/Start Speck (Mac).command"
+    open_launcher "$repo"
   elif [ "$code" -ne 0 ]; then
-    osascript -e 'on run argv' -e 'display alert "Speck couldn’t start" message (item 1 of argv)' -e 'end run' \
-      "$(printf '%s' "$out" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^\s*$' | tail -4)" >/dev/null 2>&1
+    alert "Speck couldn’t start" "$(printf '%s' "$out" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^[[:space:]]*$' | tail -4)"
   fi
   return 0
 }

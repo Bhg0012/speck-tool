@@ -110,9 +110,12 @@ class Ollama {
   }
 
   // Loads a model into memory so the first real question is fast.
-  async warm(model, keepAlive) {
+  // Use the same num_ctx as real calls, otherwise Ollama reloads the model on the first question.
+  async warm(model, keepAlive, numCtx) {
     try {
-      await this.request('/api/generate', { method: 'POST', body: { model, keep_alive: keepAlive || '30m' }, timeoutMs: 180000 });
+      const body = { model, keep_alive: keepAlive || '2h' };
+      if (numCtx) body.options = { num_ctx: numCtx };
+      await this.request('/api/generate', { method: 'POST', body, timeoutMs: 180000 });
       return true;
     } catch {
       return false;

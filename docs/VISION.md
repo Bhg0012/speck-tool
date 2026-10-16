@@ -30,11 +30,14 @@ philosophy.
    thought. A number, a word, an option ("B) 42"), or one short sentence.
 4. **Local and private.** The LLM runs on the user's machine through Ollama.
    Nothing is sent to the cloud.
-5. **Easy to start.** One double-click launcher for Mac and one for PC. Each
-   launch pulls the latest version from GitHub so it is always up to date.
+5. **Easy to start, always up to date.** One double-click launcher for Mac and one for
+   PC, plus the Speck.app Dock icon. **Every launch must update to the latest `main` on
+   GitHub. This is crucial.** All three run the same `scripts/start.js` + `scripts/update.js`,
+   and an already-running old version is restarted into the new one.
+6. **Fast.** Answers should come back in seconds, not minutes (see docs/PERFORMANCE.md).
    On Mac, `Speck.app` can sit in the Dock as a one-click launcher (no Terminal
    window). The running Speck itself still has no Dock icon.
-6. **Quick, powerful, satisfying** for daily work and normal tasks.
+7. **Quick, powerful, satisfying** for daily work and normal tasks.
 
 ## 3. The experience (as envisioned)
 
@@ -49,6 +52,10 @@ philosophy.
 ### Asking
 - A tiny button near the bottom of the screen (a small translucent dot), **or** a
   global hotkey, sends whatever is between the two corners to the LLM.
+- While it works, **only the dot pulses**. No "reading..." or progress text, ever.
+  Text at the bottom appears only when the answer is ready.
+- Right-click the dot for the menu: version number + when it was updated (to confirm
+  updates landed), settings, restart, quit. There's also a quit hotkey.
 - The markers are hidden for the instant the screenshot is taken, so they never
   end up in the image.
 
@@ -66,25 +73,22 @@ philosophy.
   the tiny answer shows.
 
 ### Models
-- The user chooses which model(s) to use. Bruce mentioned GPT-OSS. Note that
-  GPT-OSS is text-only and **cannot see images**, so Speck uses a two-stage design:
-  - **Reader** (vision model, default `qwen3-vl:8b`) transcribes the region exactly.
-  - **Solver** (default "auto": `gpt-oss:20b` if installed, otherwise the reader)
-    reasons out the answer.
-- Models can be chosen and downloaded from the Settings window.
+- The user chooses the model in Settings. Bruce mentioned GPT-OSS; it is text-only (can't see
+  images), so it's only offered as an optional solver behind a vision model.
+- Default: `qwen3-vl:8b-instruct`, one vision model that reads and answers. The "thinking"
+  `qwen3-vl:8b` was the v1.0 default and made answers take minutes.
 
 ## 4. Accuracy pipeline (how "double-check" works)
 
 | Mode | Steps |
 | --- | --- |
-| **Fast** | Single pass. Confidence is capped at 8 because the answer isn't verified. |
-| **Careful** *(default)* | Read, then solve, then an independent verifier solves it again and compares. If they disagree, a tie-breaker solve decides by majority. |
-| **Max** (deep hotkey) | Read, then two independent solves (different method/seed), then verify. Tie-break at high reasoning effort on any disagreement. |
+| **Fast** | One attempt. Confidence capped at 8 (unverified). |
+| **Careful** *(default)* | Two independent attempts (the second uses a different method); tie-break on disagreement. |
+| **Max** (deep hotkey) | Three independent attempts; tie-break if there's no majority. |
 
-Confidence (1-10) combines the models' own confidence, **agreement between
-independent attempts**, an **arithmetic re-computation** of numeric answers (a
-safe expression evaluator checks the model's math), and the **legibility** of the
-captured region. Disagreement or unreadable input always pulls the score down.
+Each attempt copies the question exactly and shows short working before the answer. Confidence
+(1-10) combines the model's own confidence, **agreement between independent attempts**, and an
+**arithmetic re-computation** of numeric answers. Disagreement always pulls the score down.
 
 ## 5. Design language
 
@@ -125,3 +129,14 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   menu item.
 - **2026-10-16** - Standing instruction: push, pull request and merge every change into `main`
   automatically, without asking (recorded in CLAUDE.md).
+- **2026-10-16** - "Reading" took minutes with no answer. Wants answers **pretty quickly**.
+  Root cause: thinking model + model reloads + too many calls (docs/PERFORMANCE.md). Switched to
+  `qwen3-vl:8b-instruct`, 2 independent attempts, no reloads.
+- **2026-10-16** - No "reading" text at the bottom: not discreet. Only the dot pulses while
+  working; text appears only with the answer.
+- **2026-10-16** - Wants an easy way to quit: quit hotkey + "Quit Speck" in the dot's menu.
+- **2026-10-16** - Updates are **absolutely crucial**: Mac/Windows launchers and Speck.app must all
+  update to the latest GitHub version, and Speck.app must actually work (no "move it to the
+  Dock" message). Everything must be tested before pushing.
+- **2026-10-16** - Right-clicking the dot shows the version number and when it was updated, so
+  Bruce can confirm an update landed.

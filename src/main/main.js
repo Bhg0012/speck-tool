@@ -15,9 +15,10 @@ const {
 } = require('electron');
 const { Settings } = require('./settings');
 const { Ollama } = require('./ollama');
-const { solve, resolveModels } = require('./solver');
+const { solve, resolveModels, NUM_CTX } = require('./solver');
 const { captureRegion } = require('./capture');
 const { RECOMMENDED_MODELS, settingsFile } = require('../shared/defaults');
+const { readVersionInfo, versionLabels } = require('../shared/version');
 
 const IS_MAC = process.platform === 'darwin';
 const ROOT = path.join(__dirname, '..', '..');
@@ -194,9 +195,6 @@ function barClear() {
   }, 250);
 }
 
-function showStatus(text) {
-  barShow({ kind: 'status', text: settings.get().appearance.showStatus ? text : '' });
-}
 
 function showError(message, ms = 6000) {
   barShow({ kind: 'error', text: message });
@@ -360,7 +358,8 @@ async function ask(deep) {
   send(win.tl, 'pulse');
   send(win.br, 'pulse');
   send(win.dot, 'busy', true);
-  showStatus('reading');
+  // Discreet: while working only the dot pulses. The bar stays empty until the answer is ready.
+  if (barHasContent) barClear();
   const s = settings.get();
   try {
     const result = await solve({
@@ -369,7 +368,6 @@ async function ask(deep) {
       ollama,
       mode: deep ? 'max' : s.mode,
       signal: controller.signal,
-      onStatus: (st) => id === jobId && showStatus(st),
     });
     if (id !== jobId) return;
     lastResult = result;
@@ -403,6 +401,7 @@ function registerHotkeys() {
     toggle,
     copy: copyAnswer,
     settings: openSettings,
+    quit: () => app.quit(),
   };
   const failed = [];
   for (const [name, fn] of Object.entries(actions)) {
@@ -417,10 +416,21 @@ function registerHotkeys() {
   return failed;
 }
 
+// Build this process loaded (compared with newer launches to restart after an update).
+const LOADED_BUILD = readVersionInfo(ROOT).commit || 'dev';
+
+function buildArg(argv) {
+  const a = argv.find((x) => typeof x === 'string' && x.startsWith('--speck-build='));
+  return a ? a.slice('--speck-build='.length) : null;
+}
+
 function menuTemplate() {
   const hk = settings.get().hotkeys;
   const acc = (k) => (hk[k] ? { accelerator: hk[k], registerAccelerator: false } : {});
+  const info = versionLabels(readVersionInfo(ROOT)).map((label) => ({ label, enabled: false }));
   return [
+    ...info,
+    { type: 'separator' },
     { label: 'Ask', click: () => ask(false), ...acc('capture') },
     { label: 'Ask (max accuracy)', click: () => ask(true), ...acc('deep') },
     { label: 'Copy answer', click: copyAnswer, enabled: !!lastResult, ...acc('copy') },
@@ -430,7 +440,7 @@ function menuTemplate() {
     { label: 'Settings…', click: openSettings, ...acc('settings') },
     { type: 'separator' },
     { label: 'Restart Speck', click: restartApp },
-    { label: 'Quit Speck', click: () => app.quit() },
+    { label: 'Quit Speck', click: () => app.quit(), ...acc('quit') },
   ];
 }
 
@@ -514,8 +524,8 @@ function applySettings() {
 async function warmModels(reportErrors = false) {
   try {
     const m = await resolveModels(ollama, settings.get());
-    await ollama.warm(m.reader, settings.get().keepAlive);
-    if (m.solver !== m.reader) await ollama.warm(m.solver, settings.get().keepAlive);
+    await ollama.warm(m.reader, settings.get().keepAlive, NUM_CTX);
+    if (m.solver !== m.reader) await ollama.warm(m.solver, settings.get().keepAlive, NUM_CTX);
   } catch (e) {
     if (reportErrors) showError(e.message, 8000);
   }
@@ -594,7 +604,12 @@ function registerIpc() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => setHidden(false));
+  app.on('second-instance', (_e, argv) => {
+    // Launched again after an update: restart into the new code. Otherwise just show.
+    const build = buildArg(argv);
+    if (argv.includes('--restart') || (build && build !== 'dev' && build !== LOADED_BUILD)) restartApp();
+    else setHidden(false);
+  });
   app.on('window-all-closed', () => {
     // Overlays are never closed; the settings window closing must not quit the app.
   });

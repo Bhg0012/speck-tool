@@ -10,11 +10,12 @@ const HOTKEYS = [
   ['toggle', 'Hide / show everything'],
   ['copy', 'Copy last answer'],
   ['settings', 'Open settings'],
+  ['quit', 'Quit Speck'],
 ];
 const MODE_HINTS = {
-  fast: 'One pass. Quickest, not double-checked (confidence capped at 8).',
-  careful: 'Reads, solves, then an independent check. Breaks ties if they disagree. Recommended.',
-  max: 'Two independent solves plus a check at maximum reasoning effort. Slowest, most reliable.',
+  fast: 'One attempt. Fastest, but not double-checked (confidence capped at 8).',
+  careful: 'Two independent attempts that must agree; a tie-breaker runs if they don\'t. Recommended.',
+  max: 'Three independent attempts plus a tie-breaker if needed. Slowest, most reliable.',
 };
 
 let state = null; // { settings, recommended, platform, version }
@@ -126,8 +127,7 @@ function renderModels() {
 
   const solver = $('solverModel');
   solver.innerHTML = '';
-  solver.append(el('option', { value: 'auto' }, 'Auto: gpt-oss if installed, else the reader'));
-  solver.append(el('option', { value: 'reader' }, 'Same as reader'));
+  solver.append(el('option', { value: 'reader' }, 'Same model (recommended, fastest)'));
   for (const m of installed) {
     solver.append(el('option', { value: m.name }, `${m.name}${m.thinking ? '  · reasoning' : ''}  ${gb(m.size)}`));
   }
@@ -304,8 +304,6 @@ async function init() {
   $('autoHideSeconds').onchange = (e) => save({ appearance: { autoHideSeconds: Number(e.target.value) } });
   $('showConfidence').checked = a.showConfidence;
   $('showConfidence').onchange = (e) => save({ appearance: { showConfidence: e.target.checked } });
-  $('showStatus').checked = a.showStatus;
-  $('showStatus').onchange = (e) => save({ appearance: { showStatus: e.target.checked } });
 
   $('tray-label').textContent = IS_MAC ? 'Show menu bar icon' : 'Show tray icon';
   $('showTray').checked = s.showTray;
