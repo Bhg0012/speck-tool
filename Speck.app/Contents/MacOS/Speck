@@ -1,0 +1,43 @@
+#!/bin/bash
+# Speck.app: click it (e.g. in the Dock) to update Speck from GitHub and start it, with no Terminal window.
+# First-time setup (installs, model download) opens "Start Speck (Mac).command" in Terminal so progress is visible.
+# Everything lives in main() so bash has read the whole script before `git pull` can update this file.
+
+main() {
+  local here repo out code
+  here="$(cd "$(dirname "$0")/../../.." && pwd)"
+  if [ -f "$here/scripts/start.js" ]; then
+    repo="$here"
+  elif [ -f "$HOME/speck-tool/scripts/start.js" ]; then
+    repo="$HOME/speck-tool"
+  else
+    osascript -e 'display alert "Speck" message "Keep Speck.app inside the speck-tool folder, and drag it from there to the Dock."' >/dev/null 2>&1
+    return 1
+  fi
+  cd "$repo" || return 1
+
+  # Apps opened from the Dock don't get the Terminal PATH.
+  export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+  [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+
+  if ! command -v node >/dev/null 2>&1; then
+    open -a Terminal "$repo/Start Speck (Mac).command"
+    return 0
+  fi
+
+  if [ -d .git ] && command -v git >/dev/null 2>&1; then
+    git pull --ff-only --quiet >/dev/null 2>&1
+  fi
+
+  out="$(node scripts/start.js --quiet 2>&1)"
+  code=$?
+  if [ "$code" -eq 3 ]; then
+    open -a Terminal "$repo/Start Speck (Mac).command"
+  elif [ "$code" -ne 0 ]; then
+    osascript -e 'on run argv' -e 'display alert "Speck couldn’t start" message (item 1 of argv)' -e 'end run' \
+      "$(printf '%s' "$out" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^\s*$' | tail -4)" >/dev/null 2>&1
+  fi
+  return 0
+}
+
+main "$@"; exit $?

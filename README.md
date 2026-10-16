@@ -30,6 +30,8 @@ No dock icon, no taskbar button, no big windows.
 | --- | --- |
 | Double-click **`Start Speck (Mac).command`** | Double-click **`Start Speck (Windows).bat`** |
 
+**Mac Dock icon:** in the `speck-tool` folder, drag **`Speck.app`** onto your Dock. Clicking it updates and starts Speck with no Terminal window (Terminal only opens for first-time setup or when something needs downloading). Keep `Speck.app` in the `speck-tool` folder; the Dock just points to it. Clicking it while Speck is hidden brings it back.
+
 Each launch **pulls the latest version from GitHub**, installs anything new, makes sure Ollama is running, downloads the AI model the first time (a few GB), then starts Speck in the background.
 
 > **Mac, first run:** macOS asks for **Screen Recording** permission (it may be listed as *Electron*). Allow it, then start Speck again.

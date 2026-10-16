@@ -5,6 +5,10 @@
 // 2. makes sure Ollama is running
 // 3. downloads the chosen model the first time
 // 4. starts Speck in the background and exits
+//
+// With --quiet (used by Speck.app, which has no window), any step that needs the user to
+// watch or act (installing, first model download, installing Ollama) exits with code 3
+// instead, so the app can open the visible launcher in Terminal.
 
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -16,10 +20,13 @@ const { DEFAULTS, settingsFile, merge } = require('../src/shared/defaults');
 const ROOT = path.join(__dirname, '..');
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
+const QUIET = process.argv.includes('--quiet');
+const NEEDS_SETUP = 3;
 
-const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-const mint = (s) => `\x1b[38;2;124;247;212m${s}\x1b[0m`;
-const red = (s) => `\x1b[31m${s}\x1b[0m`;
+const plain = (s) => s;
+const dim = QUIET ? plain : (s) => `\x1b[2m${s}\x1b[0m`;
+const mint = QUIET ? plain : (s) => `\x1b[38;2;124;247;212m${s}\x1b[0m`;
+const red = QUIET ? plain : (s) => `\x1b[31m${s}\x1b[0m`;
 const say = (s = '') => console.log(`  ${s}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,6 +34,10 @@ function fail(msg, hint) {
   say(red(msg));
   if (hint) say(hint);
   process.exit(1);
+}
+
+function needsSetup() {
+  if (QUIET) process.exit(NEEDS_SETUP);
 }
 
 function openUrl(url) {
@@ -63,6 +74,7 @@ function ensureDeps() {
   const stamp = path.join(ROOT, 'node_modules', '.speck-deps');
   const have = fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8').trim() : '';
   if (have === want && electronPath()) return;
+  needsSetup();
 
   say(have ? 'Updating components…' : 'Installing components (first run only, about a minute)…');
   const r = spawnSync(IS_WIN ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
@@ -129,6 +141,7 @@ async function ensureOllama(base) {
   if (!local) fail(`Can't reach Ollama at ${base}.`, 'Check the server URL in Speck settings.');
   say('Starting Ollama…');
   if (!startOllama()) {
+    needsSetup();
     openUrl('https://ollama.com/download');
     fail(
       'Ollama is not installed. It runs the AI locally.',
@@ -202,11 +215,13 @@ async function pullModel(base, model) {
 
 async function ensureModels(base, s) {
   let names = await installedModels(base);
+  const missingSolver = !['auto', 'reader'].includes(s.solverModel) && !has(names, s.solverModel);
+  if (!has(names, s.readerModel) || missingSolver) needsSetup();
   if (!has(names, s.readerModel)) {
     await pullModel(base, s.readerModel);
     names = await installedModels(base);
   }
-  if (!['auto', 'reader'].includes(s.solverModel) && !has(names, s.solverModel)) {
+  if (missingSolver) {
     await pullModel(base, s.solverModel);
   }
 }
@@ -251,5 +266,5 @@ function launch(s) {
     say(red(`Couldn't check models: ${e.message}`));
   }
   launch(s);
-  if (os.platform() === 'darwin') say(dim('You can close this window.'));
+  if (os.platform() === 'darwin' && !QUIET) say(dim('You can close this window.'));
 })().catch((e) => fail(e.message));

@@ -32,6 +32,8 @@ philosophy.
    Nothing is sent to the cloud.
 5. **Easy to start.** One double-click launcher for Mac and one for PC. Each
    launch pulls the latest version from GitHub so it is always up to date.
+   On Mac, `Speck.app` can sit in the Dock as a one-click launcher (no Terminal
+   window). The running Speck itself still has no Dock icon.
 6. **Quick, powerful, satisfying** for daily work and normal tasks.
 
 ## 3. The experience (as envisioned)
@@ -113,3 +115,7 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   One-click start buttons for Mac and PC that pull the latest from GitHub. All visions
   must be saved in the repo so they're never lost. "I can't emphasize enough how
   discreet I want it to be."
+- **2026-10-16** - Wants Speck as an app icon in the MacBook Dock. Built `Speck.app`
+  (a launcher bundle in the repo root with the Speck icon): click it to update and start
+  Speck silently. First-time setup still opens Terminal so progress is visible. The running
+  overlay keeps hiding its own Dock icon to stay discreet.

@@ -15,6 +15,8 @@ When Bruce shares a new idea, preference or insight in a chat:
 - `src/shared/defaults.js` - default settings plus the settings file location (used by the app and the launcher).
 - `scripts/start.js` - cross-platform launcher logic (deps, Ollama, model pull, start).
 - `Start Speck (Mac).command`, `Start Speck (Windows).bat` - double-click launchers (they `git pull` first).
+- `Speck.app/` - macOS Dock launcher (bash script bundle). Runs `scripts/start.js --quiet`; exit code 3 means
+  "needs visible setup", so it opens the `.command` in Terminal.
 
 ## Rules of thumb
 - Discreet first: nothing big, bright or persistent on screen; no taskbar/dock presence.

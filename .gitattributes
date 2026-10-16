@@ -3,3 +3,5 @@
 *.command text eol=lf
 *.sh text eol=lf
 *.png binary
+Speck.app/Contents/MacOS/* text eol=lf
+*.icns binary
