@@ -3,17 +3,45 @@
 # First-time setup (installs, model download) opens "Start Speck (Mac).command" in Terminal so progress is visible.
 # Everything lives in main() so bash has read the whole script before `git pull` can update this file.
 
+SAVED="$HOME/Library/Application Support/Speck/repo-path"
+
+is_repo() {
+  [ -f "$1/scripts/start.js" ] && [ -f "$1/Start Speck (Mac).command" ]
+}
+
+# Finds the speck-tool folder even when macOS runs this app from a hidden
+# "translocated" copy (downloaded apps) or the app was moved out of the folder.
+find_repo() {
+  local c
+  c="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)"
+  if is_repo "$c"; then echo "$c"; return 0; fi
+  if [ -f "$SAVED" ]; then
+    c="$(cat "$SAVED")"
+    if is_repo "$c"; then echo "$c"; return 0; fi
+  fi
+  for c in "$HOME/speck-tool" "$HOME/speck-tool-main" "$HOME"/Desktop/speck-tool* "$HOME"/Downloads/speck-tool* \
+    "$HOME"/Documents/speck-tool* "$HOME"/Developer/speck-tool* "$HOME"/Applications/speck-tool*; do
+    if is_repo "$c"; then echo "$c"; return 0; fi
+  done
+  # Last resort: ask Spotlight where the Mac launcher lives.
+  while IFS= read -r c; do
+    case "$c" in *AppTranslocation* | */.Trash/*) continue ;; esac
+    c="$(dirname "$c")"
+    if is_repo "$c"; then echo "$c"; return 0; fi
+  done < <(mdfind -name "Start Speck (Mac).command" 2>/dev/null)
+  return 1
+}
+
 main() {
-  local here repo out code
-  here="$(cd "$(dirname "$0")/../../.." && pwd)"
-  if [ -f "$here/scripts/start.js" ]; then
-    repo="$here"
-  elif [ -f "$HOME/speck-tool/scripts/start.js" ]; then
-    repo="$HOME/speck-tool"
-  else
-    osascript -e 'display alert "Speck" message "Keep Speck.app inside the speck-tool folder, and drag it from there to the Dock."' >/dev/null 2>&1
+  local repo out code
+  if ! repo="$(find_repo)"; then
+    osascript -e 'display alert "Speck" message "Couldn’t find the speck-tool folder. Double-click “Start Speck (Mac).command” inside it once, then try again."' >/dev/null 2>&1
     return 1
   fi
+  mkdir -p "$(dirname "$SAVED")" && printf '%s' "$repo" >"$SAVED"
+  # Downloaded copies are quarantined, which makes macOS run them from a temporary
+  # location and block the launchers. Clear it for Speck's own folder only.
+  xattr -dr com.apple.quarantine "$repo" >/dev/null 2>&1
   cd "$repo" || return 1
 
   # Apps opened from the Dock don't get the Terminal PATH.
