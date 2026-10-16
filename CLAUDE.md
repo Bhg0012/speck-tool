@@ -13,15 +13,19 @@ When Bruce shares a new idea, preference or insight in a chat:
   - `solver.js` - read, then solve, then verify, then confidence. `answer.js` and `mathcheck.js` are pure and unit-tested.
 - `src/renderer/` - overlay UI (corner markers, dot button, answer bar) and settings window.
 - `src/shared/defaults.js` - default settings plus the settings file location (used by the app and the launcher).
-- `scripts/start.js` - cross-platform launcher logic (deps, Ollama, model pull, start).
-- `Start Speck (Mac).command`, `Start Speck (Windows).bat` - double-click launchers (they `git pull` first).
+- `scripts/start.js` - cross-platform launcher logic (update, deps, Ollama, model pull, start).
+- `scripts/update.js` - syncs the folder to the latest `main` on GitHub; writes `.speck-version.json`.
+- `src/shared/version.js` - version/commit/update-date lines for the right-click menu.
+- `Start Speck (Mac).command`, `Start Speck (Windows).bat` - double-click launchers (thin wrappers around start.js).
 - `Speck.app/` - macOS Dock launcher (bash script bundle). Runs `scripts/start.js --quiet`; exit code 3 means
   "needs visible setup", so it opens the `.command` in Terminal.
 
 ## Git workflow (Bruce's standing instruction, 2026-10-16)
 Push, open a pull request into `main`, and merge it for **every** change, without asking first.
 Use a merge commit (not squash) so the working branch stays in sync with `main`.
-`main` is what the launchers update from.
+`main` is what the launchers update from (scripts/update.js force-syncs every copy to origin/main).
+Bump `version` in package.json for every change; Bruce checks it in the dot's right-click menu.
+Test launcher/update changes against a local fake remote (see test/update.test.js) before pushing.
 
 ## Rules of thumb
 - Discreet first: nothing big, bright or persistent on screen; no taskbar/dock presence.

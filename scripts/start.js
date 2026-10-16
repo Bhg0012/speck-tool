@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-// Cross-platform launcher used by "Start Speck (Mac).command" and "Start Speck (Windows).bat".
+// Cross-platform launcher used by "Start Speck (Mac).command", "Start Speck (Windows).bat" and Speck.app.
+// 0. updates Speck to the latest version on GitHub (scripts/update.js), then re-runs itself
 // 1. installs/updates dependencies when needed
 // 2. makes sure Ollama is running
 // 3. downloads the chosen model the first time
@@ -15,7 +16,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { DEFAULTS, settingsFile, merge } = require('../src/shared/defaults');
+const { DEFAULTS, settingsFile, merge, migrate } = require('../src/shared/defaults');
+const { update } = require('./update');
+const { readVersionInfo } = require('../src/shared/version');
 
 const ROOT = path.join(__dirname, '..');
 const IS_WIN = process.platform === 'win32';
@@ -33,6 +36,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fail(msg, hint) {
   say(red(msg));
   if (hint) say(hint);
+  // Keep the window open so the message can be read (the launchers exit right after this).
+  if (!QUIET && process.stdin.isTTY) {
+    process.stdout.write('\n  Press Enter to close...');
+    try {
+      fs.readSync(0, Buffer.alloc(1), 0, 1);
+    } catch {
+      // stdin not readable: just exit
+    }
+  }
   process.exit(1);
 }
 
@@ -52,7 +64,7 @@ function openUrl(url) {
 
 function loadSettings() {
   try {
-    return merge(DEFAULTS, JSON.parse(fs.readFileSync(settingsFile(), 'utf8')), true);
+    return merge(DEFAULTS, migrate(JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))), true);
   } catch {
     return DEFAULTS;
   }
@@ -65,27 +77,53 @@ function ensureDeps() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < 18) fail(`Node.js ${process.versions.node} is too old.`, 'Install the LTS version from https://nodejs.org');
 
-  const hash = crypto.createHash('sha1');
-  for (const f of ['package.json', 'package-lock.json']) {
-    const p = path.join(ROOT, f);
-    if (fs.existsSync(p)) hash.update(fs.readFileSync(p));
-  }
-  const want = hash.digest('hex');
+  const want = depsFingerprint();
   const stamp = path.join(ROOT, 'node_modules', '.speck-deps');
   const have = fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8').trim() : '';
   if (have === want && electronPath()) return;
-  needsSetup();
+  // Speck.app has no window: only open Terminal when there's a big download to watch.
+  if (!electronUpToDate()) needsSetup();
 
   say(have ? 'Updating components…' : 'Installing components (first run only, about a minute)…');
   const r = spawnSync(IS_WIN ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
     cwd: ROOT,
-    stdio: 'inherit',
+    stdio: QUIET ? 'ignore' : 'inherit',
     shell: IS_WIN,
   });
   if (r.status !== 0 || !electronPath()) {
     fail('Installing components failed.', 'Check your internet connection, delete the "node_modules" folder and try again.');
   }
   fs.writeFileSync(stamp, want);
+}
+
+// Only what affects node_modules (not Speck's own version number), so a normal update
+// doesn't trigger a reinstall.
+function depsFingerprint() {
+  const readJson = (f) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
+    } catch {
+      return {};
+    }
+  };
+  const pkg = readJson('package.json');
+  const lock = readJson('package-lock.json');
+  const packages = { ...(lock.packages || {}) };
+  delete packages['']; // the root entry only repeats Speck's own name/version
+  const data = JSON.stringify({ deps: pkg.dependencies || {}, dev: pkg.devDependencies || {}, packages });
+  return crypto.createHash('sha1').update(data).digest('hex');
+}
+
+// True when the installed Electron already matches the lockfile (npm install is then quick).
+function electronUpToDate() {
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
+    const want = lock.packages['node_modules/electron'].version;
+    const have = JSON.parse(fs.readFileSync(path.join(ROOT, 'node_modules', 'electron', 'package.json'), 'utf8')).version;
+    return want === have && !!electronPath();
+  } catch {
+    return false;
+  }
 }
 
 function electronPath() {
@@ -240,14 +278,16 @@ function pretty(acc) {
 function launch(s) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  // A running Speck restarts itself when this build differs from the one it loaded.
+  const args = [ROOT, `--speck-build=${readVersionInfo(ROOT).commit || 'dev'}`];
   if (IS_MAC) {
     // Launch through LaunchServices so macOS treats Speck as its own app ("Electron") for
     // Screen Recording, instead of inheriting Terminal's or Speck.app's permission.
     // -n starts a new instance (an already-running Speck just shows itself), -g keeps focus where it is.
     const bundle = path.resolve(electronPath(), '..', '..', '..');
-    spawnSync('open', ['-n', '-g', '-a', bundle, '--args', ROOT], { stdio: 'ignore' });
+    spawnSync('open', ['-n', '-g', '-a', bundle, '--args', ...args], { stdio: 'ignore' });
   } else {
-    const child = spawn(electronPath(), [ROOT], { cwd: ROOT, detached: true, stdio: 'ignore', env });
+    const child = spawn(electronPath(), args, { cwd: ROOT, detached: true, stdio: 'ignore', env });
     child.unref();
   }
   const hk = s.hotkeys;
@@ -258,12 +298,46 @@ function launch(s) {
   say(dim(`Hide / show    ${pretty(hk.toggle)}`));
   say(dim(`Copy answer    ${pretty(hk.copy)}`));
   say(dim(`Settings       ${pretty(hk.settings)}   (or right-click the dot)`));
+  say(dim(`Quit           ${pretty(hk.quit)}   (or right-click the dot, then Quit Speck)`));
   say();
+}
+
+function selfUpdate() {
+  if (process.argv.includes('--no-update')) return;
+  say('Checking for updates...');
+  const r = update(ROOT);
+  if (r.status === 'updated') {
+    const v = readVersionInfo(ROOT);
+    say(`${mint('↑')} Updated to v${v.version} (${v.commit})`);
+    // Run the freshly downloaded launcher for the rest of the steps.
+    const child = spawnSync(process.execPath, [__filename, ...process.argv.slice(2), '--no-update'], { stdio: 'inherit' });
+    process.exit(child.status === null ? 1 : child.status);
+  }
+  if (r.status === 'current') say(dim(`Up to date (v${readVersionInfo(ROOT).version}, ${readVersionInfo(ROOT).commit})`));
+  else if (r.status === 'offline') say(dim("Couldn't reach GitHub to check for updates. Starting the current version."));
+  else if (r.status === 'no-git') {
+    say(red('Git is not installed, so Speck cannot update itself.'));
+    if (!QUIET && IS_MAC) {
+      say('Opening Apple\'s installer for it (click Install). Then start Speck again.');
+      spawnSync('xcode-select', ['--install'], { stdio: 'ignore' });
+    } else if (!QUIET && IS_WIN && which('winget')) {
+      say('Installing Git...');
+      spawnSync('winget', ['install', '-e', '--id', 'Git.Git', '--accept-source-agreements', '--accept-package-agreements'], { stdio: 'inherit' });
+      const again = update(ROOT);
+      if (again.status === 'updated') {
+        const child = spawnSync(process.execPath, [__filename, ...process.argv.slice(2), '--no-update'], { stdio: 'inherit' });
+        process.exit(child.status === null ? 1 : child.status);
+      }
+    } else {
+      say(dim('Install Git from https://git-scm.com/downloads, then start Speck again.'));
+    }
+  } else if (r.status === 'failed') say(red(`Update failed (${r.message || 'unknown error'}). Starting the current version.`));
 }
 
 (async () => {
   console.log();
   say(`${mint('·')} speck`);
+  selfUpdate();
   ensureDeps();
   const s = loadSettings();
   const base = String(s.ollamaUrl).replace(/\/+$/, '');

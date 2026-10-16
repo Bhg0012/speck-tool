@@ -38,11 +38,11 @@
       <section>
         <h2>Models</h2>
         <label class="field">
-          <span>Reader <em>(sees the screen; must support vision)</em></span>
+          <span>Vision model <em>(reads the screen and answers)</em></span>
           <select id="readerModel"></select>
         </label>
         <label class="field">
-          <span>Solver <em>(works out the answer)</em></span>
+          <span>Solver <em>(optional: a different model to work out answers)</em></span>
           <select id="solverModel"></select>
         </label>
         <details>
@@ -104,7 +104,6 @@
           </select>
         </label>
         <label class="toggle"><input id="showConfidence" type="checkbox" /> Show confidence (x/10)</label>
-        <label class="toggle"><input id="showStatus" type="checkbox" /> Show progress text (reading, verifying…)</label>
       </section>
 
       <section>

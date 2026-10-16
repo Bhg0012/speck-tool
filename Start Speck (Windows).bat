@@ -1,21 +1,16 @@
 @echo off
 rem Double-click to start Speck on Windows.
-rem It updates Speck from GitHub, installs what's needed, then starts it in the background.
+rem Updates Speck to the latest version on GitHub, installs what's needed, then starts it.
+rem All the logic is in scripts\start.js (shared with Mac). The node line also exits on the
+rem same line, so an update that replaces this file while it runs can't confuse Windows.
 title Speck
 cd /d "%~dp0"
 
-rem 1. Update from GitHub
-where git >nul 2>nul
-if errorlevel 1 goto node
-if not exist ".git" goto node
-echo   Checking for updates...
-git pull --ff-only --quiet 2>nul
-if errorlevel 1 echo   Couldn't update right now. Starting the current version.
-
-:node
-rem 2. Node.js
 where node >nul 2>nul
-if not errorlevel 1 goto run
+if errorlevel 1 goto nonode
+node scripts\start.js %* & exit /b
+
+:nonode
 echo   Speck needs Node.js (free).
 where winget >nul 2>nul
 if errorlevel 1 goto manualnode
@@ -31,12 +26,3 @@ echo   Download the LTS installer from https://nodejs.org, install it, then run 
 start "" "https://nodejs.org/en/download"
 pause
 exit /b 1
-
-:run
-rem 3. Everything else (dependencies, Ollama, model, launch)
-node scripts\start.js
-if errorlevel 1 (
-  pause
-  exit /b 1
-)
-exit /b 0

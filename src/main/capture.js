@@ -1,7 +1,7 @@
 'use strict';
 const { desktopCapturer, screen } = require('electron');
 
-const MAX_SIDE = 1600; // keep images fast to process
+const MAX_SIDE = 1280; // ~800 image tokens: fast, and text stays sharp (Retina captures are 2x)
 const MIN_SIDE = 480; // upscale tiny regions so small text stays readable
 
 function intersect(a, b) {

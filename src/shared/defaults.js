@@ -3,20 +3,22 @@
 const os = require('os');
 const path = require('path');
 
-const DEFAULT_READER = 'qwen3-vl:8b';
+const DEFAULT_READER = 'qwen3-vl:8b-instruct';
 
 const DEFAULTS = {
+  configVersion: 2,
   ollamaUrl: 'http://127.0.0.1:11434',
   readerModel: DEFAULT_READER, // vision model that reads the screen
-  solverModel: 'auto', // 'auto' (gpt-oss if installed, else reader) | 'reader' | model name
+  solverModel: 'reader', // 'reader' (same model does everything) | any installed model name
   mode: 'careful', // 'fast' | 'careful' | 'max'
-  keepAlive: '30m', // how long Ollama keeps models warm in memory
+  keepAlive: '2h', // how long Ollama keeps the model loaded (first answer after that is slower)
   hotkeys: {
     capture: 'CommandOrControl+Alt+A',
     deep: 'CommandOrControl+Alt+D',
     toggle: 'CommandOrControl+Alt+H',
     copy: 'CommandOrControl+Alt+C',
     settings: 'CommandOrControl+Alt+,',
+    quit: 'CommandOrControl+Alt+Q',
   },
   appearance: {
     theme: 'dark-on-light', // 'dark-on-light' | 'light-on-dark' | 'plain-dark' | 'plain-light'
@@ -25,7 +27,6 @@ const DEFAULTS = {
     markerOpacity: 0.35, // corner markers + dot
     position: 'center', // 'left' | 'center' | 'right'
     showConfidence: true,
-    showStatus: true,
     autoHideSeconds: 0, // 0 = keep the answer until the next one
   },
   showTray: true,
@@ -34,12 +35,26 @@ const DEFAULTS = {
 };
 
 const RECOMMENDED_MODELS = [
-  { name: 'qwen3-vl:8b', role: 'Reader', note: 'Best all-round screen reader (~6 GB)' },
-  { name: 'qwen3-vl:4b', role: 'Reader', note: 'Lighter and faster, for 8 GB machines (~3 GB)' },
-  { name: 'qwen2.5vl:7b', role: 'Reader', note: 'Proven alternative reader (~6 GB)' },
-  { name: 'gemma3:12b', role: 'Reader', note: 'Strong general vision model (~8 GB)' },
-  { name: 'gpt-oss:20b', role: 'Solver', note: 'Best reasoning and math. Needs 16 GB+ RAM (~14 GB)' },
+  { name: 'qwen3-vl:8b-instruct', role: 'Vision', note: 'Recommended. Fast and accurate (~6 GB)' },
+  { name: 'qwen3-vl:4b-instruct', role: 'Vision', note: 'About twice as fast, a little less accurate (~3 GB)' },
+  { name: 'qwen3-vl:8b', role: 'Vision', note: 'Thinking version: more careful but much slower' },
+  { name: 'gemma3:12b', role: 'Vision', note: 'Strong alternative (~8 GB)' },
+  { name: 'gpt-oss:20b', role: 'Solver', note: 'Text-only reasoning model, slow. Needs 16 GB+ RAM (~14 GB)' },
 ];
+
+// Brings settings files from older versions up to date.
+function migrate(raw) {
+  const s = raw && typeof raw === 'object' ? { ...raw } : {};
+  if (!s.configVersion || s.configVersion < 2) {
+    // v1 defaulted to the slow "thinking" qwen3-vl:8b and a gpt-oss auto-solver.
+    if (!s.readerModel || s.readerModel === 'qwen3-vl:8b') s.readerModel = DEFAULT_READER;
+    if (!s.solverModel || s.solverModel === 'auto') s.solverModel = 'reader';
+    if (s.keepAlive === '30m') s.keepAlive = '2h';
+    if (s.appearance) delete s.appearance.showStatus;
+    s.configVersion = 2;
+  }
+  return s;
+}
 
 function appDataDir() {
   if (process.platform === 'win32') return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
@@ -68,4 +83,4 @@ function merge(base, patch, strict = false) {
   return out;
 }
 
-module.exports = { DEFAULTS, DEFAULT_READER, RECOMMENDED_MODELS, appDataDir, settingsFile, merge };
+module.exports = { DEFAULTS, DEFAULT_READER, RECOMMENDED_MODELS, appDataDir, settingsFile, merge, migrate };

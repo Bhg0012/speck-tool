@@ -95,15 +95,12 @@ if (role === 'bar') {
       return;
     }
     current = p;
-    pill.classList.remove('status', 'error', 'answer');
+    pill.classList.remove('error', 'answer');
     pill.classList.add(p.kind, 'show');
     detail.textContent = '';
     conf.textContent = '';
 
-    if (p.kind === 'status') {
-      text.innerHTML = '<span class="spin"></span>';
-      if (p.text) text.append(document.createTextNode(p.text));
-    } else if (p.kind === 'error') {
+    if (p.kind === 'error') {
       text.textContent = `! ${p.text}`;
     } else if (p.kind === 'answer') {
       text.textContent = p.answer;

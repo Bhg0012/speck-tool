@@ -1,12 +1,25 @@
 'use strict';
-// The accuracy pipeline: read -> solve -> verify (-> tie-break) -> confidence.
+// The accuracy pipeline. Every attempt solves the problem independently; answers are
+// compared and a tie-breaker runs only when they disagree.
+//
+//   fast:    1 attempt
+//   careful: 2 independent attempts (+ tie-break if they disagree)        <- default
+//   max:     3 independent attempts (+ tie-break if there's no majority)
+//
+// Speed rules (measured against real Ollama, see docs/PERFORMANCE.md):
+// - one num_ctx for every call, so Ollama never reloads the model mid-question
+// - identical system prompt + screenshot first in every attempt, so the image is processed once
+// - instruct (non-thinking) vision model by default; working is short and visible in JSON
 const A = require('./answer');
 const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
-class SpeckError extends Error {}
+const NUM_CTX = 4096; // image (<=1600 tokens) + prompt + answer fit; smaller = less memory, faster
+const MAX_TOKENS = 600; // bounded output for non-thinking models
+const CALL_TIMEOUT_MS = 120000;
+const THINKING_TIMEOUT_MS = 240000;
 
-const STATUS = { reading: 'reading', solving: 'solving', second: 'double-checking', verifying: 'verifying', tiebreak: 're-checking' };
+class SpeckError extends Error {}
 
 function pickInstalled(names, wanted) {
   if (!wanted) return null;
@@ -22,19 +35,17 @@ async function resolveModels(ollama, settings) {
   if (reader && !(await ollama.isVision(reader))) reader = null;
   if (!reader) {
     for (const n of names) {
-      if (await ollama.isVision(n)) { reader = n; break; }
+      if (await ollama.isVision(n)) {
+        reader = n;
+        break;
+      }
     }
   }
   if (!reader) throw new SpeckError(`No vision model installed. Open Settings and download ${DEFAULT_READER}`);
 
   let solver;
-  if (settings.solverModel === 'auto') {
-    solver = names.find((n) => /^gpt-oss:20b/.test(n)) || names.find((n) => /^gpt-oss/.test(n)) || reader;
-  } else if (settings.solverModel === 'reader') {
-    solver = reader;
-  } else {
-    solver = pickInstalled(names, settings.solverModel) || reader;
-  }
+  if (settings.solverModel === 'auto' || settings.solverModel === 'reader') solver = reader;
+  else solver = pickInstalled(names, settings.solverModel) || reader;
 
   const [readerCaps, solverCaps] = await Promise.all([ollama.capabilities(reader), ollama.capabilities(solver)]);
   return { reader, solver, readerCaps, solverCaps, solverVision: solverCaps.includes('vision') };
@@ -43,13 +54,15 @@ async function resolveModels(ollama, settings) {
 // gpt-oss takes an effort level; other thinking models take true/false; others get nothing.
 function thinkParam(model, caps, level) {
   if (!caps.includes('thinking')) return undefined;
-  if (/gpt-oss/i.test(model)) return level === 'off' ? 'low' : level;
-  return level !== 'off';
+  if (/gpt-oss/i.test(model)) return level === 'off' ? 'low' : level; // gpt-oss can't fully turn it off
+  return level === 'medium' || level === 'high'; // fast mode skips thinking entirely
 }
 
-function resultFrom(r) {
-  const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
-  return A.normalizeResult(obj, r.content);
+function tooSlow(e) {
+  if (e && e.kind === 'timeout') {
+    return new SpeckError('The model is too slow on this computer. Try Fast mode, or qwen3-vl:4b-instruct in Settings');
+  }
+  return e;
 }
 
 /**
@@ -60,120 +73,110 @@ function resultFrom(r) {
  * @param {'fast'|'careful'|'max'} o.mode
  * @param {(s: string) => void} [o.onStatus]
  * @param {AbortSignal} [o.signal]
+ * @param {number} [o.timeoutScale]  multiplies per-call timeouts (benchmarks on slow machines)
  */
-async function solve({ image, settings, ollama, mode = 'careful', onStatus = () => {}, signal }) {
+async function solve({ image, settings, ollama, mode = 'careful', onStatus = () => {}, signal, timeoutScale = 1 }) {
   const m = await resolveModels(ollama, settings);
   const keepAlive = settings.keepAlive;
   const effort = mode === 'fast' ? 'low' : mode === 'max' ? 'high' : 'medium';
-
-  // 1. READ: the vision model transcribes the region exactly.
-  let reading = null;
-  if (mode !== 'fast' || !m.solverVision) {
-    onStatus(STATUS.reading);
-    const r = await ollama.chat({
-      model: m.reader,
-      messages: [
-        { role: 'system', content: P.READER },
-        { role: 'user', content: 'Transcribe this screen region.', images: [image] },
-      ],
-      think: thinkParam(m.reader, m.readerCaps, 'off'),
-      options: { temperature: 0, num_ctx: 12288 },
-      keepAlive,
-      signal,
-    });
-    reading = A.parseReader(r.content || r.thinking);
-  }
-
-  // Constrained JSON decoding fights with hidden reasoning, so thinking models get prompt-only JSON.
   const solverThinks = m.solverCaps.includes('thinking');
-  const problemText = reading ? `SCREEN CONTENT:\n${reading.transcript}` : 'The problem is in the attached screenshot.';
-  const images = m.solverVision ? [image] : undefined;
 
-  async function solveOnce({ temperature, seed, independent = false, level = effort }) {
-    const content = `${problemText}\n\n${independent ? P.INDEPENDENT + '\n\n' : ''}Give the final answer.`;
-    const r = await ollama.chat({
-      model: m.solver,
-      messages: [
-        { role: 'system', content: P.SOLVER },
-        { role: 'user', content, images },
-      ],
-      format: solverThinks ? undefined : P.SOLVE_SCHEMA,
-      think: thinkParam(m.solver, m.solverCaps, level),
-      options: { temperature, seed, num_ctx: 16384 },
-      keepAlive,
-      signal,
-    });
-    return resultFrom(r);
+  // Text-only solver: a vision model transcribes the region first.
+  let transcript = null;
+  let legibility = 'good';
+  if (!m.solverVision) {
+    onStatus('reading');
+    try {
+      const r = await ollama.chat({
+        model: m.reader,
+        messages: [
+          { role: 'system', content: P.READER },
+          { role: 'user', content: 'Transcribe this screen region.', images: [image] },
+        ],
+        think: thinkParam(m.reader, m.readerCaps, 'off'),
+        options: { temperature: 0, num_ctx: NUM_CTX, num_predict: MAX_TOKENS },
+        keepAlive,
+        signal,
+        timeoutMs: CALL_TIMEOUT_MS * timeoutScale,
+      });
+      const reading = A.parseReader(r.content || r.thinking);
+      transcript = reading.transcript;
+      legibility = reading.legibility;
+    } catch (e) {
+      throw tooSlow(e);
+    }
   }
 
-  async function verifyOnce(candidate) {
-    const content = `${problemText}\n\nCANDIDATE ANSWER: ${candidate.answer}\n\nCheck it.`;
-    const r = await ollama.chat({
-      model: m.solver,
-      messages: [
-        { role: 'system', content: P.VERIFIER },
-        { role: 'user', content, images },
-      ],
-      format: solverThinks ? undefined : P.VERIFY_SCHEMA,
-      think: thinkParam(m.solver, m.solverCaps, effort),
-      options: { temperature: 0.2, seed: 42, num_ctx: 16384 },
-      keepAlive,
-      signal,
-    });
+  async function attempt(instruction, { temperature, seed, source }) {
+    const user = m.solverVision
+      ? { role: 'user', content: instruction, images: [image] }
+      : { role: 'user', content: `${instruction.replace('in this screenshot', 'below')}\n\nSCREEN CONTENT:\n${transcript}` };
+    let r;
+    try {
+      r = await ollama.chat({
+        model: m.solver,
+        messages: [{ role: 'system', content: P.SOLVER }, user],
+        // Constrained JSON fights with hidden reasoning, so thinking models get prompt-only JSON.
+        format: solverThinks ? undefined : P.SOLVE_SCHEMA,
+        think: thinkParam(m.solver, m.solverCaps, effort),
+        options: { temperature, seed, num_ctx: NUM_CTX, num_predict: solverThinks ? undefined : MAX_TOKENS },
+        keepAlive,
+        signal,
+        timeoutMs: (solverThinks ? THINKING_TIMEOUT_MS : CALL_TIMEOUT_MS) * timeoutScale,
+      });
+    } catch (e) {
+      throw tooSlow(e);
+    }
     const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
-    if (!obj) return null;
-    const v = A.normalizeResult(obj, r.content);
-    // A "correct" verdict is a vote for the candidate, whatever formatting the checker used.
-    if (obj.correct === true) return { ...candidate, confidence: v.confidence, source: 'verify' };
-    return { ...v, source: 'verify' };
+    return { ...A.normalizeResult(obj, r.content), source };
   }
 
-  // 2. SOLVE
-  onStatus(STATUS.solving);
-  const primary = { ...(await solveOnce({ temperature: 0, seed: 1 })), source: 'solve' };
-  const candidates = [primary];
+  onStatus('solving');
+  const candidates = [await attempt(P.FIRST, { temperature: 0, seed: 1, source: 'first' })];
 
-  if (mode === 'max') {
-    onStatus(STATUS.second);
-    candidates.push({ ...(await solveOnce({ temperature: 0.6, seed: 7, independent: true })), source: 'independent' });
-  }
-
-  // 3. VERIFY, then 4. TIE-BREAK on any disagreement.
   if (mode !== 'fast') {
-    onStatus(STATUS.verifying);
-    const v = await verifyOnce(primary);
-    if (v) candidates.push(v);
+    onStatus('checking');
+    candidates.push(await attempt(P.SECOND, { temperature: 0.4, seed: 7, source: 'second' }));
+    if (mode === 'max') candidates.push(await attempt(P.SECOND, { temperature: 0.7, seed: 21, source: 'third' }));
+
     const groups = A.tally(candidates);
     const counted = candidates.filter((c) => c.answer).length;
-    if (groups.length > 1 || !groups[0] || groups[0].members.length < counted) {
-      onStatus(STATUS.tiebreak);
-      candidates.push({ ...(await solveOnce({ temperature: 0.3, seed: 13, independent: true, level: 'high' })), source: 'tiebreak' });
+    const majority = groups[0] && groups[0].members.length > counted / 2;
+    const unanimous = groups.length === 1 && groups[0].members.length === counted;
+    if (mode === 'max' ? !majority : !unanimous) {
+      onStatus('tie-break');
+      const seen = groups.map((g) => g.members[0].answer).slice(0, 3);
+      candidates.push(await attempt(P.tiebreak(seen), { temperature: 0.2, seed: 13, source: 'tiebreak' }));
     }
   }
 
   const groups = A.tally(candidates);
   const total = candidates.filter((c) => c.answer).length;
-  if (!groups[0]) {
-    return { answer: '?', note: "Couldn't find an answer", confidence: 1, mode, models: m, transcript: reading && reading.transcript };
-  }
+  const models = { reader: m.reader, solver: m.solver };
+  if (!groups[0]) return { answer: '?', note: "Couldn't find an answer", confidence: 1, agreement: `0/${total}`, mode, models };
+
   const winners = groups[0].members;
-  // Prefer the member that carries the richest output (note/check) for display.
-  const best = winners.find((c) => c.source === 'solve') || winners.find((c) => c.check || c.note) || winners[0];
+  const best = winners[0];
   const checked = winners.find((c) => c.check) || best;
   const math = A.mathCheck(checked);
-  const confidence = A.scoreConfidence({ groups, total, math, legibility: reading ? reading.legibility : 'good' });
+  const confidence = A.scoreConfidence({ groups, total, math, legibility });
+
+  // Multiple choice: always show the letter, e.g. "C) 75".
+  let answer = best.answer;
+  if (best.choice && !/^\(?[A-Za-z0-9]{1,2}[).:\s]/.test(answer) && answer.toUpperCase() !== best.choice) {
+    answer = `${best.choice}) ${answer}`;
+  }
 
   return {
-    answer: best.answer,
+    answer,
     choice: best.choice || '',
     note: best.note || winners.map((c) => c.note).find(Boolean) || '',
     confidence,
     agreement: `${winners.length}/${total}`,
     math,
     mode,
-    models: { reader: m.reader, solver: m.solver },
-    transcript: reading ? reading.transcript : '',
+    models,
   };
 }
 
-module.exports = { solve, resolveModels, thinkParam, SpeckError };
+module.exports = { solve, resolveModels, thinkParam, SpeckError, NUM_CTX };
