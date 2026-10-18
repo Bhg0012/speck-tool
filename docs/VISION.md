@@ -34,6 +34,8 @@ philosophy.
    PC, plus the Speck.app Dock icon. **Every launch must update to the latest `main` on
    GitHub. This is crucial.** All three run the same `scripts/start.js` + `scripts/update.js`,
    and an already-running old version is restarted into the new one.
+   On Windows, a "Speck" shortcut with the Speck icon (folder + Start Menu) is the equivalent of
+   the Mac's Speck.app.
 6. **Fast.** Answers should come back in seconds, not minutes (see docs/PERFORMANCE.md).
    On Mac, `Speck.app` can sit in the Dock as a one-click launcher (no Terminal
    window). The running Speck itself still has no Dock icon.
@@ -153,3 +155,8 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
 - **2026-10-18** - Wants a history of the last 30 questions + answers (only if it's light on
   storage: it is, text only, ~30 KB), opened from the Speck dot, scrollable, with a button to
   copy the whole question and answer. Older entries deleted.
+- **2026-10-18** - On Windows there was no app icon in the folder like on Mac. Added a "Speck"
+  shortcut with the Speck icon (folder + Start Menu, pinnable) that starts Speck silently.
+- **2026-10-18** - On Windows the dot and corner brackets showed a faint box around them, and the
+  dot showed a hand cursor that made it hard to click. Must look and feel like the Mac: no box,
+  normal arrow cursor, easy to click.

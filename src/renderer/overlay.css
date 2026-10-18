@@ -35,10 +35,7 @@ body[data-role='tl'],
 body[data-role='br'],
 body[data-role='dot'] {
   background: rgba(0, 0, 0, 0.01);
-  cursor: grab;
-}
-body.dragging {
-  cursor: grabbing;
+  cursor: default; /* normal arrow; Windows draws "grab" as a hand */
 }
 
 /* ---- corner markers ---- */

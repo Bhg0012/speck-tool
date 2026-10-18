@@ -30,6 +30,8 @@ No dock icon, no taskbar button, no big windows.
 | --- | --- |
 | Double-click **`Start Speck (Mac).command`** (or click **Speck** in your Dock) | Double-click **`Start Speck (Windows).bat`** |
 
+**Windows Speck icon:** the first time you run `Start Speck (Windows).bat`, it adds a **Speck** shortcut with the Speck icon, both in the `speck-tool` folder and in the Start Menu (search "Speck"). Use that from then on. It updates and starts Speck with no console window (the console only opens for first-time setup or downloads). Right-click it and choose **Pin to taskbar** if you like.
+
 **Mac Dock icon:** in the `speck-tool` folder, drag **`Speck.app`** onto your Dock. Clicking it updates and starts Speck with no Terminal window (Terminal only opens for first-time setup or when something needs downloading). Keep `Speck.app` in the `speck-tool` folder; the Dock just points to it. Clicking it while Speck is hidden brings it back.
 
 Every launch **updates Speck to the latest version on GitHub** (all three launchers run the same `scripts/start.js`), installs anything new, makes sure Ollama is running, downloads the AI model the first time (about 6 GB), then starts Speck in the background. If an older Speck is still running, it is restarted into the new version.
