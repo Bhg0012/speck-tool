@@ -171,6 +171,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     answer,
     choice: best.choice || '',
     note: best.note || winners.map((c) => c.note).find(Boolean) || '',
+    question: best.question || candidates.map((c) => c.question).find(Boolean) || '',
     confidence,
     agreement: `${winners.length}/${total}`,
     math,

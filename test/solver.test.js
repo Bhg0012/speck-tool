@@ -48,6 +48,7 @@ test('careful: two agreeing attempts -> one answer, high confidence, consistent 
   try {
     const r = await run(srv.url, 'careful');
     assert.equal(r.answer, '36');
+    assert.equal(r.question, 'q', 'question text is passed on for history');
     assert.equal(r.confidence, 10);
     assert.equal(r.agreement, '2/2');
     assert.equal(srv.calls.length, 2);

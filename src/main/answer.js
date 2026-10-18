@@ -75,6 +75,7 @@ function normalizeResult(obj, rawText = '') {
     check: str(obj.check),
     confidence: clampConf(obj.confidence),
     note: str(obj.note).slice(0, 140),
+    question: str(obj.question).slice(0, 2000),
     parsed: true,
   };
 }

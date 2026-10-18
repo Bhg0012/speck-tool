@@ -55,7 +55,13 @@ philosophy.
 - While it works, **only the dot pulses**. No "reading..." or progress text, ever.
   Text at the bottom appears only when the answer is ready.
 - Right-click the dot for the menu: version number + when it was updated (to confirm
-  updates landed), settings, restart, quit. There's also a quit hotkey.
+  updates landed), history, settings, restart, quit. There's also a quit hotkey.
+
+### History
+- The last 30 questions and answers (text only, never screenshots, ~30 KB in total, on this
+  computer only). Anything beyond 30 is deleted. Opened from the dot's menu or a hotkey.
+- A small dark scrollable window, newest first. Each entry has a Copy button (full question +
+  answer + confidence). There's a Clear button, and history can be turned off in Settings.
 - The markers are hidden for the instant the screenshot is taken, so they never
   end up in the image.
 
@@ -144,3 +150,6 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   Bruce's copy was a ZIP download, so the old launcher skipped the pull silently. Launchers now say
   plainly when GitHub needs a login, and the menu shows "Updates blocked". Fix: public repo, or
   `gh auth login`.
+- **2026-10-18** - Wants a history of the last 30 questions + answers (only if it's light on
+  storage: it is, text only, ~30 KB), opened from the Speck dot, scrollable, with a button to
+  copy the whole question and answer. Older entries deleted.

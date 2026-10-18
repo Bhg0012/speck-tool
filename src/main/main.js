@@ -14,6 +14,7 @@ const {
   systemPreferences,
 } = require('electron');
 const { Settings } = require('./settings');
+const { History, entryText } = require('./history');
 const { Ollama } = require('./ollama');
 const { solve, resolveModels, NUM_CTX } = require('./solver');
 const { captureRegion } = require('./capture');
@@ -36,8 +37,9 @@ app.setPath('userData', path.dirname(settingsFile()));
 
 const settings = new Settings(settingsFile());
 const ollama = new Ollama(settings.get().ollamaUrl);
+const history = new History(path.join(path.dirname(settingsFile()), 'history.json'));
 
-const win = { tl: null, br: null, dot: null, frame: null, bar: null, settings: null };
+const win = { tl: null, br: null, dot: null, frame: null, bar: null, settings: null, history: null };
 let tray = null;
 let hidden = false;
 let barHasContent = false;
@@ -204,6 +206,10 @@ function showError(message, ms = 6000) {
 
 function showAnswer(result) {
   barShow({ kind: 'answer', ...result });
+  if (settings.get().saveHistory && result.answer && result.answer !== '?') {
+    history.add(result);
+    send(win.history, 'history:changed');
+  }
   clearTimeout(autoHideTimer);
   const secs = Number(settings.get().appearance.autoHideSeconds) || 0;
   if (secs > 0) autoHideTimer = setTimeout(barClear, secs * 1000);
@@ -216,6 +222,7 @@ function setHidden(h) {
   hidden = h;
   if (h) {
     for (const w of overlays()) w.hide();
+    if (win.history && !win.history.isDestroyed()) win.history.hide();
   } else {
     for (const w of [win.tl, win.br, win.dot]) w.showInactive();
     if (barHasContent) win.bar.showInactive();
@@ -327,7 +334,7 @@ function restartApp() {
 
 async function grab(rect) {
   // Hide our own overlays for the instant of the screenshot.
-  const visible = overlays().filter((w) => w.isVisible());
+  const visible = [...overlays(), win.history].filter((w) => w && !w.isDestroyed() && w.isVisible());
   for (const w of visible) w.setOpacity(0);
   await new Promise((r) => setTimeout(r, 80));
   try {
@@ -402,6 +409,7 @@ function registerHotkeys() {
     copy: copyAnswer,
     settings: openSettings,
     quit: () => app.quit(),
+    history: openHistory,
   };
   const failed = [];
   for (const [name, fn] of Object.entries(actions)) {
@@ -437,6 +445,7 @@ function menuTemplate() {
     { type: 'separator' },
     { label: hidden ? 'Show' : 'Hide', click: toggle, ...acc('toggle') },
     { label: 'Reset capture area', click: resetPositions },
+    { label: 'History…', click: openHistory, ...acc('history') },
     { label: 'Settings…', click: openSettings, ...acc('settings') },
     { type: 'separator' },
     { label: 'Restart Speck', click: restartApp },
@@ -508,6 +517,54 @@ function openSettings() {
   });
   win.settings.on('closed', () => {
     win.settings = null;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// History window: small and dark, near the dot, never in the taskbar/dock
+
+function openHistory() {
+  if (win.history && !win.history.isDestroyed()) {
+    win.history.show();
+    win.history.focus();
+    if (IS_MAC) app.focus({ steal: true });
+    return;
+  }
+  const W = 380;
+  const H = 480;
+  const [dx, dy] = win.dot.getPosition();
+  const wa = screen.getDisplayNearestPoint({ x: dx, y: dy }).workArea;
+  const x = Math.max(wa.x + 8, Math.min(dx + DOT - W, wa.x + wa.width - W - 8));
+  const y = Math.max(wa.y + 8, Math.min(dy - H - 8, wa.y + wa.height - H - 8));
+  win.history = new BrowserWindow({
+    x,
+    y,
+    width: W,
+    height: H,
+    minWidth: 300,
+    minHeight: 240,
+    show: false,
+    frame: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    title: 'History',
+    backgroundColor: '#0e0e12',
+    webPreferences: { preload: PRELOAD, contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  win.history.setAlwaysOnTop(true, 'floating');
+  if (IS_MAC) win.history.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  win.history.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.history.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.history.loadFile(path.join(RENDERER, 'history.html'));
+  win.history.once('ready-to-show', () => {
+    win.history.show();
+    if (IS_MAC) app.focus({ steal: true });
+  });
+  win.history.on('closed', () => {
+    win.history = null;
   });
 }
 
@@ -593,6 +650,17 @@ function registerIpc() {
   });
   ipcMain.handle('app:reset-area', resetPositions);
   ipcMain.handle('app:quit', () => app.quit());
+  ipcMain.handle('history:list', () => ({ items: history.list(), enabled: settings.get().saveHistory }));
+  ipcMain.handle('history:copy', (_e, at) => {
+    const item = history.list().find((h) => h.at === at);
+    if (item) clipboard.writeText(entryText(item));
+    return !!item;
+  });
+  ipcMain.handle('history:clear', () => {
+    history.clear();
+    return true;
+  });
+  ipcMain.handle('history:close', () => win.history && !win.history.isDestroyed() && win.history.close());
   ipcMain.handle('app:open', (_e, url) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
   });
