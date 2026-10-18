@@ -17,6 +17,8 @@ When Bruce shares a new idea, preference or insight in a chat:
 - `scripts/update.js` - syncs the folder to the latest `main` on GitHub; writes `.speck-version.json`.
 - `src/shared/version.js` - version/commit/update-date lines for the right-click menu.
 - `Start Speck (Mac).command`, `Start Speck (Windows).bat` - double-click launchers (thin wrappers around start.js).
+- `Speck.vbs` + `scripts/shortcut.js` - Windows twin of Speck.app: start.js creates a "Speck" shortcut
+  (assets/speck.ico) in the folder + Start Menu that runs Speck.vbs silently (exit 3 -> opens the .bat).
 - `Speck.app/` - macOS Dock launcher (bash script bundle). Runs `scripts/start.js --quiet`; exit code 3 means
   "needs visible setup", so it opens the `.command` in Terminal.
 

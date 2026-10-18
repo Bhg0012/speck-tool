@@ -4,3 +4,5 @@ Thumbs.db
 dist/
 *.log
 .speck-version.json
+Speck.lnk
+.speck-shortcut

@@ -30,6 +30,7 @@ const ASSETS = path.join(ROOT, 'assets');
 const HANDLE = 28; // corner marker window size
 const PAD = 7; // where the bracket's corner sits inside the marker window
 const DOT = 22; // capture button window size
+const CLICK_SLOP = 6; // a press that moves less than this (px) on the dot is a click, not a drag
 const BAR_H = 150; // answer bar window height (room for the hover-expanded answer)
 
 app.setName('Speck');
@@ -119,6 +120,9 @@ function overlay(role, bounds, { clickThrough = false } = {}) {
     fullscreenable: false,
     skipTaskbar: true,
     hasShadow: false,
+    // Windows: without these a borderless window still gets a faint system frame/shadow box.
+    thickFrame: false,
+    roundedCorners: false,
     focusable: false,
     acceptFirstMouse: true,
     alwaysOnTop: true,
@@ -270,7 +274,7 @@ function dragTick() {
   if (Date.now() - drag.started > 120000) return dragEnd(); // safety net if mouse-up was lost
   const c = screen.getCursorScreenPoint();
   drag.moved = Math.max(drag.moved, Math.abs(c.x - drag.sx) + Math.abs(c.y - drag.sy));
-  if (drag.role === 'dot' && drag.moved < 4) return;
+  if (drag.role === 'dot' && drag.moved < CLICK_SLOP) return;
   drag.w.setPosition(Math.round(c.x - drag.ox), Math.round(c.y - drag.oy));
   if (drag.role !== 'dot') win.frame.setBounds(currentRegion());
 }
@@ -282,7 +286,7 @@ function dragEnd() {
   const d = drag;
   drag = null;
   if (d.role === 'dot') {
-    if (d.moved < 4) ask(false);
+    if (d.moved < CLICK_SLOP) ask(false);
     else {
       const [x, y] = d.w.getPosition();
       settings.update({ dotPosition: { x, y } });

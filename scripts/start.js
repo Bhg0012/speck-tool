@@ -18,6 +18,7 @@ const os = require('os');
 const path = require('path');
 const { DEFAULTS, settingsFile, merge, migrate } = require('../src/shared/defaults');
 const { update } = require('./update');
+const { ensureShortcuts } = require('./shortcut');
 const { readVersionInfo } = require('../src/shared/version');
 
 const ROOT = path.join(__dirname, '..');
@@ -342,6 +343,7 @@ function selfUpdate() {
   console.log();
   say(`${mint('·')} speck`);
   selfUpdate();
+  if (ensureShortcuts(ROOT)) say(`${mint('◆')} Added a "Speck" shortcut (Speck icon) here and in the Start Menu. Use it to start Speck.`);
   ensureDeps();
   const s = loadSettings();
   const base = String(s.ollamaUrl).replace(/\/+$/, '');

@@ -5,3 +5,5 @@
 *.png binary
 Speck.app/Contents/MacOS/* text eol=lf
 *.icns binary
+*.vbs text eol=crlf
+*.ico binary
