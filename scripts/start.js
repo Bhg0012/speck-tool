@@ -315,6 +315,10 @@ function selfUpdate() {
   }
   if (r.status === 'current') say(dim(`Up to date (v${readVersionInfo(ROOT).version}, ${readVersionInfo(ROOT).commit})`));
   else if (r.status === 'offline') say(dim("Couldn't reach GitHub to check for updates. Starting the current version."));
+  else if (r.status === 'auth') {
+    say(red('Speck can\'t update: GitHub needs a login for this private repository.'));
+    say(dim('Fix once: make the repository public, or run "gh auth login" (GitHub CLI). See README > Updates.'));
+  }
   else if (r.status === 'no-git') {
     say(red('Git is not installed, so Speck cannot update itself.'));
     if (!QUIET && IS_MAC) {

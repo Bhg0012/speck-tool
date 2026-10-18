@@ -51,6 +51,13 @@ function gitAvailable() {
   return false;
 }
 
+// A private GitHub repo without a saved login looks like one of these (prompts are disabled).
+function isAuthError(stderr) {
+  return /could not read Username|terminal prompts disabled|Authentication failed|Repository not found|returned error: 40[134]|Permission denied \(publickey\)/i.test(
+    stderr || '',
+  );
+}
+
 function head(root) {
   const r = run(GIT, ['rev-parse', 'HEAD'], root, 10000);
   return r.ok ? r.out : null;
@@ -72,7 +79,7 @@ function record(root, check, extra = {}) {
     version: packageVersion(root),
     commit: commit ? commit.slice(0, 7) : prev.commit || '',
     commitDate: date || prev.commitDate || '',
-    check, // 'ok' | 'offline' | 'no-git' | 'failed'
+    check, // 'ok' | 'offline' | 'auth' | 'no-git' | 'failed'
     checkedAt: new Date().toISOString(),
     installedAt: extra.updated ? new Date().toISOString() : prev.installedAt || new Date().toISOString(),
   };
@@ -82,7 +89,7 @@ function record(root, check, extra = {}) {
 
 /**
  * Updates `root` to the latest origin/main.
- * @returns {{ status: 'updated'|'current'|'offline'|'no-git'|'failed', from?: string, to?: string, message?: string }}
+ * @returns {{ status: 'updated'|'current'|'offline'|'auth'|'no-git'|'failed', from?: string, to?: string, message?: string }}
  */
 function update(root, { repoUrl = REPO_URL, branch = BRANCH } = {}) {
   if (process.env.SPECK_NO_UPDATE === '1') return { status: 'current' };
@@ -104,8 +111,9 @@ function update(root, { repoUrl = REPO_URL, branch = BRANCH } = {}) {
   const from = head(root);
   const fetched = run(GIT, ['fetch', '--quiet', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], root, 90000);
   if (!fetched.ok) {
-    record(root, 'offline');
-    return { status: 'offline', from, message: fetched.err.split('\n').pop() };
+    const status = isAuthError(fetched.err) ? 'auth' : 'offline';
+    record(root, status);
+    return { status, from, message: fetched.err.split('\n').pop() };
   }
 
   const target = run(GIT, ['rev-parse', `refs/remotes/origin/${branch}`], root, 10000).out;
@@ -127,4 +135,4 @@ function update(root, { repoUrl = REPO_URL, branch = BRANCH } = {}) {
   return { status: from !== to ? 'updated' : 'current', from, to };
 }
 
-module.exports = { update, gitAvailable, REPO_URL, BRANCH };
+module.exports = { update, gitAvailable, isAuthError, REPO_URL, BRANCH };

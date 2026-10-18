@@ -140,3 +140,7 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   Dock" message). Everything must be tested before pushing.
 - **2026-10-16** - Right-clicking the dot shows the version number and when it was updated, so
   Bruce can confirm an update landed.
+- **2026-10-18** - The Mac launcher wasn't pulling updates. Cause: the GitHub repo is private and
+  Bruce's copy was a ZIP download, so the old launcher skipped the pull silently. Launchers now say
+  plainly when GitHub needs a login, and the menu shows "Updates blocked". Fix: public repo, or
+  `gh auth login`.
