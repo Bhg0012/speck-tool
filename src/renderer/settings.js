@@ -10,6 +10,7 @@ const HOTKEYS = [
   ['toggle', 'Hide / show everything'],
   ['copy', 'Copy last answer'],
   ['settings', 'Open settings'],
+  ['history', 'Show history'],
   ['quit', 'Quit Speck'],
 ];
 const MODE_HINTS = {
@@ -306,6 +307,8 @@ async function init() {
   $('showConfidence').onchange = (e) => save({ appearance: { showConfidence: e.target.checked } });
 
   $('tray-label').textContent = IS_MAC ? 'Show menu bar icon' : 'Show tray icon';
+  $('saveHistory').checked = s.saveHistory;
+  $('saveHistory').onchange = (e) => save({ saveHistory: e.target.checked });
   $('showTray').checked = s.showTray;
   $('showTray').onchange = (e) => save({ showTray: e.target.checked });
   $('reset-area').onclick = () => speck.invoke('app:reset-area');

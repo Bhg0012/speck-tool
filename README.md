@@ -62,11 +62,13 @@ once GitHub access works.
 | **Hide / show everything** | `⌘⌥H` | `Ctrl+Alt+H` |
 | Copy last answer | `⌘⌥C` | `Ctrl+Alt+C` |
 | Settings | `⌘⌥,` or right-click the dot | `Ctrl+Alt+,` or right-click the dot |
+| History (last 30) | `⌘⌥Y` or right-click the dot, then *History…* | `Ctrl+Alt+Y` or right-click the dot, then *History…* |
 | **Quit Speck** | `⌘⌥Q` or right-click the dot, then *Quit Speck* | `Ctrl+Alt+Q` or right-click the dot, then *Quit Speck* |
 
 - While Speck works, **only the dot pulses**. Nothing appears at the bottom until the answer is ready.
 - **Hover** the answer to see the full text and a short note. **Click** it to copy, **right-click** it to dismiss.
 - **Ghost mode:** while everything is hidden, the Ask hotkey still works. Only the tiny answer appears.
+- **History:** the last 30 questions and answers, newest first, each with a **Copy** button that copies the whole question and answer. Older entries are deleted automatically. It's text only (about 1 KB each, roughly 30 KB in total) and stays on this computer. Use **Clear** to wipe it, or turn history off in Settings.
 - Drag the dot anywhere you like. Speck remembers the positions.
 - All hotkeys can be changed in Settings.
 

@@ -11,8 +11,12 @@ const INVOKE = new Set([
   'app:reset-area',
   'app:quit',
   'app:open',
+  'history:list',
+  'history:copy',
+  'history:clear',
+  'history:close',
 ]);
-const ON = new Set(['appearance', 'bar', 'frame', 'pulse', 'busy', 'pull:progress']);
+const ON = new Set(['appearance', 'bar', 'frame', 'pulse', 'busy', 'pull:progress', 'history:changed']);
 
 contextBridge.exposeInMainWorld('speck', {
   platform: process.platform,

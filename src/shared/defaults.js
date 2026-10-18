@@ -19,6 +19,7 @@ const DEFAULTS = {
     copy: 'CommandOrControl+Alt+C',
     settings: 'CommandOrControl+Alt+,',
     quit: 'CommandOrControl+Alt+Q',
+    history: 'CommandOrControl+Alt+Y',
   },
   appearance: {
     theme: 'dark-on-light', // 'dark-on-light' | 'light-on-dark' | 'plain-dark' | 'plain-light'
@@ -30,6 +31,7 @@ const DEFAULTS = {
     autoHideSeconds: 0, // 0 = keep the answer until the next one
   },
   showTray: true,
+  saveHistory: true, // keep the last 30 questions + answers (text only, on this computer)
   region: null, // { x, y, width, height } in screen points
   dotPosition: null, // { x, y }
 };
