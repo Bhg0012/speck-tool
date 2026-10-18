@@ -101,6 +101,7 @@ function versionLabels(info, now = Date.now()) {
   if (info.commitDate) lines.push(`Updated ${fmt(info.commitDate)}`);
   if (info.check === 'ok' && info.checkedAt) lines.push(`Up to date · checked ${ago(info.checkedAt, now)}`);
   else if (info.check === 'offline') lines.push(`Couldn't check for updates · ${ago(info.checkedAt, now)}`);
+  else if (info.check === 'auth') lines.push('Updates blocked: GitHub needs a login');
   else if (info.check === 'no-git') lines.push('Auto-update off: Git is not installed');
   else if (info.check === 'failed') lines.push('Last update failed. Start from the launcher');
   return lines;

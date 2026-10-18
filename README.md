@@ -39,6 +39,20 @@ Every launch **updates Speck to the latest version on GitHub** (all three launch
 > **Mac, first run:** macOS asks for **Screen Recording** permission (it may be listed as *Electron*). Allow it, then start Speck again.
 > If macOS blocks the `.command` file, right-click it and choose **Open**.
 
+## Updates
+
+Every launch runs `git fetch` against this repository. **This repository is private**, so the Mac
+needs a saved GitHub login, or updates are blocked. The launcher then says *"GitHub needs a login"*,
+and the dot's menu says *"Updates blocked"*. Fix it once, either way:
+
+- **Make the repository public** (simplest): GitHub, then **Settings**, then **General**, then
+  *Danger Zone*, then **Change visibility**, then **Public**. No login is needed after that.
+- **Keep it private:** install GitHub CLI (`brew install gh`), then run `gh auth login` (choose
+  GitHub.com, HTTPS, *Login with a web browser*) and `gh auth setup-git`.
+
+Copies downloaded as a ZIP are turned into proper clones automatically on the next launch,
+once GitHub access works.
+
 ## Use
 
 | Action | Mac | Windows |

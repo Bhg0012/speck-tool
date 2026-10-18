@@ -105,6 +105,14 @@ test('offline: keeps the current version and says so', () => {
   assert.match(versionLabels(readVersionInfo(user)).join('|'), /Couldn't check for updates/);
 });
 
+test('recognizes a private repo without a login', () => {
+  const { isAuthError } = require('../scripts/update');
+  assert.ok(isAuthError("fatal: could not read Username for 'https://github.com': terminal prompts disabled"));
+  assert.ok(isAuthError("remote: Repository not found.\nfatal: repository 'https://github.com/x/y.git/' not found"));
+  assert.ok(!isAuthError('fatal: unable to access: Could not resolve host: github.com'));
+  assert.deepEqual(versionLabels({ version: '1', commit: 'abc', check: 'auth' }).slice(-1), ['Updates blocked: GitHub needs a login']);
+});
+
 test('menu labels show version, commit, update date and last check', () => {
   const g = setup();
   const user = g.userClone();
