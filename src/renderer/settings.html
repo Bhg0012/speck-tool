@@ -30,9 +30,12 @@
           <button id="refresh" class="ghost small">Refresh</button>
         </div>
         <label class="field">
-          <span>Server URL</span>
+          <span>AI server <em>(this computer: http://127.0.0.1:11434)</em></span>
           <input id="ollamaUrl" type="text" spellcheck="false" />
         </label>
+        <p class="hint">To use another computer's AI (e.g. your Mac, for Mac speed on a PC without a graphics card), type the address shown on that computer. If it's off or asleep, this computer answers by itself.</p>
+        <label class="toggle"><input id="shareAi" type="checkbox" /> Let my other computers use this computer's AI</label>
+        <p id="share-info" class="hint" hidden></p>
       </section>
 
       <section>
@@ -63,6 +66,20 @@
           <button data-v="max">Max</button>
         </div>
         <p class="hint" id="mode-hint"></p>
+      </section>
+
+      <section>
+        <h2>Speed</h2>
+        <p class="hint">Times a real answer on this computer and suggests the fastest setup that stays accurate.</p>
+        <div class="row gap">
+          <button id="speed-run">Run speed test</button>
+          <button id="diag-copy" class="ghost">Copy diagnostics</button>
+        </div>
+        <div id="speed-result" class="speed" hidden>
+          <div id="speed-numbers" class="muted"></div>
+          <p id="speed-advice"></p>
+          <div id="speed-actions" class="row gap"></div>
+        </div>
       </section>
 
       <section>

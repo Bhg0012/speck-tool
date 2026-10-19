@@ -74,6 +74,28 @@ once GitHub access works.
 - Drag the dot anywhere you like. Speck remembers the positions.
 - All hotkeys can be changed in Settings.
 
+## Same speed on every computer
+
+Speck is the same app on Mac and Windows. **Answer speed depends on what runs the AI model:**
+
+- **Macs with Apple chips and PCs with an NVIDIA (or supported AMD) graphics card:** a few seconds.
+- **PCs without one:** the AI runs on the processor, so expect 45 s to several minutes.
+
+**Check any computer:** Settings, then **Run speed test**. It times a real answer, says why it's slow,
+and offers one-click fixes (Fast mode, or a smaller model).
+
+**Mac speed on a PC without a graphics card: use your Mac's AI.**
+1. On the Mac: Speck Settings, then turn on **"Let my other computers use this computer's AI"**.
+   Allow incoming connections for Ollama if macOS asks. Settings then shows an address like `http://192.168.1.23:11434`.
+2. On the PC: Speck Settings, then **AI server**, and type that address.
+
+Both computers must be on the same home network, and the Mac must be awake. If the Mac is off or asleep,
+the PC quietly answers by itself. Only turn sharing on for your own home network: anyone on
+that network could use the Mac's Ollama.
+
+**Something wrong?** Right-click the dot, then **Copy diagnostics**, and paste it to Claude. It shows the
+computer's graphics card, memory, Ollama setup and how long each step of recent answers took.
+
 ## Accuracy
 
 Speck never trusts a single answer. In the default **Careful** mode:

@@ -16,8 +16,9 @@ const { DEFAULT_READER } = require('../shared/defaults');
 
 const NUM_CTX = 4096; // image (<=1600 tokens) + prompt + answer fit; smaller = less memory, faster
 const MAX_TOKENS = 600; // bounded output for non-thinking models
-const CALL_TIMEOUT_MS = 120000;
-const THINKING_TIMEOUT_MS = 240000;
+// Generous, so a slow (CPU-only) PC still gets its answer; the speed test explains how to speed it up.
+const CALL_TIMEOUT_MS = 240000;
+const THINKING_TIMEOUT_MS = 360000;
 
 class SpeckError extends Error {}
 
@@ -60,7 +61,7 @@ function thinkParam(model, caps, level) {
 
 function tooSlow(e) {
   if (e && e.kind === 'timeout') {
-    return new SpeckError('The model is too slow on this computer. Try Fast mode, or qwen3-vl:4b-instruct in Settings');
+    return new SpeckError('The model is too slow on this computer. Open Settings and run the Speed test');
   }
   return e;
 }
@@ -80,6 +81,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   const keepAlive = settings.keepAlive;
   const effort = mode === 'fast' ? 'low' : mode === 'max' ? 'high' : 'medium';
   const solverThinks = m.solverCaps.includes('thinking');
+  const calls = []; // per-call timing, for diagnostics and the speed test
 
   // Text-only solver: a vision model transcribes the region first.
   let transcript = null;
@@ -99,6 +101,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
         signal,
         timeoutMs: CALL_TIMEOUT_MS * timeoutScale,
       });
+      calls.push({ step: 'read', model: m.reader, ...r.stats });
       const reading = A.parseReader(r.content || r.thinking);
       transcript = reading.transcript;
       legibility = reading.legibility;
@@ -127,6 +130,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     } catch (e) {
       throw tooSlow(e);
     }
+    calls.push({ step: source, model: m.solver, ...r.stats });
     const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
     return { ...A.normalizeResult(obj, r.content), source };
   }
@@ -153,7 +157,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   const groups = A.tally(candidates);
   const total = candidates.filter((c) => c.answer).length;
   const models = { reader: m.reader, solver: m.solver };
-  if (!groups[0]) return { answer: '?', note: "Couldn't find an answer", confidence: 1, agreement: `0/${total}`, mode, models };
+  if (!groups[0]) return { answer: '?', note: "Couldn't find an answer", confidence: 1, agreement: `0/${total}`, mode, models, calls };
 
   const winners = groups[0].members;
   const best = winners[0];
@@ -177,6 +181,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     math,
     mode,
     models,
+    calls,
   };
 }
 

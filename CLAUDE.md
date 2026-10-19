@@ -16,6 +16,8 @@ When Bruce shares a new idea, preference or insight in a chat:
 - `scripts/start.js` - cross-platform launcher logic (update, deps, Ollama, model pull, start).
 - `scripts/update.js` - syncs the folder to the latest `main` on GitHub; writes `.speck-version.json`.
 - `src/shared/version.js` - version/commit/update-date lines for the right-click menu.
+- `src/main/share.js` - share this computer's Ollama on the home network; fallback to local when a shared one is down.
+- `src/main/diagnostics.js`, `src/shared/speed.js` - "Copy diagnostics" report and speed-test advice.
 - `Start Speck (Mac).command`, `Start Speck (Windows).bat` - double-click launchers (thin wrappers around start.js).
 - `Speck.vbs` + `scripts/shortcut.js` - Windows twin of Speck.app: start.js creates a "Speck" shortcut
   (assets/speck.ico) in the folder + Start Menu that runs Speck.vbs silently (exit 3 -> opens the .bat).

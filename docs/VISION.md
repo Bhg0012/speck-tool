@@ -160,3 +160,10 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
 - **2026-10-18** - On Windows the dot and corner brackets showed a faint box around them, and the
   dot showed a hand cursor that made it hard to click. Must look and feel like the Mac: no box,
   normal arrow cursor, easy to click.
+- **2026-10-19** - Windows still showed a faint box behind the dot and brackets. Fix: overlay windows
+  are clipped to exactly what they draw (setShape) and the Windows backdrop is off.
+- **2026-10-19** - Windows "loads and loads" while the Mac answers in seconds. **Windows and Mac must
+  look, act and feel identical.** Same app and code on both; speed depends on the hardware
+  running the model. A PC without a supported graphics card runs it on the CPU (measured 45 s to
+  3 min). Added: Speed test (Settings) with one-click fixes, Copy diagnostics, and sharing the Mac's
+  AI with the PC over the home network (with automatic fallback to the PC's own Ollama).

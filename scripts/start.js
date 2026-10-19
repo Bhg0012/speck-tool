@@ -346,7 +346,13 @@ function selfUpdate() {
   if (ensureShortcuts(ROOT)) say(`${mint('◆')} Added a "Speck" shortcut (Speck icon) here and in the Start Menu. Use it to start Speck.`);
   ensureDeps();
   const s = loadSettings();
-  const base = String(s.ollamaUrl).replace(/\/+$/, '');
+  let base = String(s.ollamaUrl).replace(/\/+$/, '');
+  if (!/\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(base) && !(await ollamaUp(base))) {
+    say(dim(`Can't reach the AI at ${base} right now (asleep or off?). Using this computer's Ollama instead.`));
+    base = 'http://127.0.0.1:11434';
+  }
+  // Sharing this computer's AI (Settings): macOS forgets this setting after a restart.
+  if (IS_MAC && s.shareAi) spawnSync('launchctl', ['setenv', 'OLLAMA_HOST', '0.0.0.0:11434']);
   await ensureOllama(base);
   try {
     await ensureModels(base, s);

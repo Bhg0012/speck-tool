@@ -62,13 +62,25 @@ if (role === 'bar') {
   const detail = $('.detail');
   let current = null;
 
+  // Tell the main process how big the answer is, so the window is clipped to just that
+  // (Windows otherwise paints a faint box over the whole see-through bar).
+  const reportShape = () =>
+    requestAnimationFrame(() => {
+      if (!pill.classList.contains('show')) return speck.send('bar:shape', null);
+      const r = pill.getBoundingClientRect();
+      const pad = 4;
+      speck.send('bar:shape', { x: r.left - pad, y: r.top - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+    });
+
   pill.addEventListener('mouseenter', () => {
     speck.send('bar:hover', true);
     if (current && current.kind === 'answer') pill.classList.add('expanded');
+    reportShape();
   });
   pill.addEventListener('mouseleave', () => {
     speck.send('bar:hover', false);
     pill.classList.remove('expanded');
+    reportShape();
   });
   pill.addEventListener('click', () => {
     if (current && current.kind === 'answer' && !getSelection().toString()) speck.send('bar:copy');
@@ -83,6 +95,7 @@ if (role === 'bar') {
     if (p.kind === 'copied') {
       const prev = conf.textContent;
       conf.textContent = 'copied';
+      reportShape();
       setTimeout(() => {
         if (conf.textContent === 'copied') conf.textContent = prev;
       }, 900);
@@ -92,24 +105,30 @@ if (role === 'bar') {
       current = null;
       pill.classList.remove('show', 'expanded');
       speck.send('bar:hover', false);
+      setTimeout(reportShape, 220); // after the fade-out
       return;
     }
     current = p;
-    pill.classList.remove('error', 'answer');
+    pill.classList.remove('error', 'answer', 'note');
     pill.classList.add(p.kind, 'show');
     detail.textContent = '';
     conf.textContent = '';
 
     if (p.kind === 'error') {
       text.textContent = `! ${p.text}`;
+    } else if (p.kind === 'note') {
+      text.textContent = p.text;
     } else if (p.kind === 'answer') {
       text.textContent = p.answer;
       if (showConfidence) conf.textContent = `${p.confidence}/10`;
       const bits = [];
       if (p.note) bits.push(p.note);
       bits.push(`${p.agreement} agree · ${p.mode}`);
+      if (p.fallback) bits.push('your AI computer was unreachable, so this computer answered');
+      if (p.slow) bits.push('slow on this computer: Settings > Speed test');
       bits.push('click to copy · right-click to dismiss');
       detail.textContent = bits.join('  ·  ');
     }
+    reportShape();
   });
 }
