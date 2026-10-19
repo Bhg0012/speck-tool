@@ -346,7 +346,7 @@ async function init() {
     setTimeout(refreshOllama, 400);
   });
   $('refresh').onclick = refreshOllama;
-  $('readerModel').onchange = (e) => save({ readerModel: e.target.value });
+  $('readerModel').onchange = (e) => save({ readerModel: e.target.value, modelAuto: false }); // picked by hand
   $('solverModel').onchange = (e) => save({ solverModel: e.target.value });
   $('custom-pull').onclick = () => pull($('custom-model').value);
 
@@ -362,6 +362,9 @@ async function init() {
   ['fontSize', 'opacity', 'markerOpacity'].forEach(bindRange);
   $('autoHideSeconds').value = String(a.autoHideSeconds);
   $('autoHideSeconds').onchange = (e) => save({ appearance: { autoHideSeconds: Number(e.target.value) } });
+  $('trimWindows').checked = a.trimWindows;
+  $('trimWindows').onchange = (e) => save({ appearance: { trimWindows: e.target.checked } });
+  if (IS_MAC) $('trim-row').hidden = true;
   $('showConfidence').checked = a.showConfidence;
   $('showConfidence').onchange = (e) => save({ appearance: { showConfidence: e.target.checked } });
 

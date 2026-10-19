@@ -81,6 +81,10 @@ Speck is the same app on Mac and Windows. **Answer speed depends on what runs th
 - **Macs with Apple chips and PCs with an NVIDIA (or supported AMD) graphics card:** a few seconds.
 - **PCs without one:** the AI runs on the processor, so expect 45 s to several minutes.
 
+**Speck picks the model for each computer's graphics card automatically**: the biggest one that
+fits, so it runs on the GPU. For example, Apple silicon gets `qwen3-vl:8b-instruct`, and a 4 GB NVIDIA card
+gets `qwen3-vl:4b-instruct`. Choosing a model by hand in Settings turns this off.
+
 **Check any computer:** Settings, then **Run speed test**. It times a real answer, says why it's slow,
 and offers one-click fixes (Fast mode, or a smaller model).
 
@@ -134,6 +138,7 @@ Screenshots go only to Ollama on your own computer (`127.0.0.1`). Nothing is upl
 
 - **"Ollama isn't running"**: open the Ollama app, or run `ollama serve`. (If Speck shows nothing but the dot keeps pulsing, it *is* connected and the model is working.)
 - **"The model is too slow on this computer"**: switch to Fast mode or `qwen3-vl:4b-instruct` in Settings.
+- **Nothing shows up after starting**: the launcher now reports it if Speck closed right after starting. Errors are written to `speck.log` next to the settings (also included in *Copy diagnostics*). On Windows, if the dot or corners ever look wrong, turn off *Trim the dot and corners* in Settings (open it with Ctrl+Alt+,).
 - **Not sure it updated?** Right-click the dot and check the version and date at the top.
 - **"No vision model"**: open Settings, then *Download models*, then `qwen3-vl:8b`.
 - **A hotkey doesn't work**: another app owns it. Pick a new one in Settings.

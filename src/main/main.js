@@ -1,4 +1,5 @@
 'use strict';
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
@@ -130,7 +131,6 @@ function overlay(role, bounds, { clickThrough = false } = {}) {
     // Windows: without these a borderless window still gets a faint system frame/shadow box.
     thickFrame: false,
     roundedCorners: false,
-    backgroundMaterial: 'none',
     focusable: false,
     acceptFirstMouse: true,
     alwaysOnTop: true,
@@ -178,8 +178,15 @@ const SHAPES = {
 };
 const TINY = [{ x: 0, y: 0, width: 1, height: 1 }];
 
+let shapeBroken = false;
 function shape(w, rects) {
-  if (CAN_SHAPE && w && !w.isDestroyed()) w.setShape(rects);
+  if (!CAN_SHAPE || shapeBroken || !settings.get().appearance.trimWindows || !w || w.isDestroyed()) return;
+  try {
+    w.setShape(rects);
+  } catch (e) {
+    shapeBroken = true; // cosmetic only: never let it break Speck, and don't retry
+    logError('setShape', e);
+  }
 }
 
 // The drag outline: just its four 2 px edges.
@@ -207,17 +214,24 @@ function createOverlays() {
   win.frame.setIgnoreMouseEvents(true);
   win.bar = overlay('bar', { x: 0, y: 0, width: 800, height: BAR_H }, { clickThrough: true });
   placeBar(screen.getDisplayMatching(region));
-  shape(win.tl, SHAPES.tl);
-  shape(win.br, SHAPES.br);
-  shape(win.dot, SHAPES.dot);
-  shape(win.bar, TINY); // the bar reports its answer's size once it has one
-  setFrameBounds(region);
-
+  // Show the dot and corners as soon as they're ready, and again after a few seconds in case
+  // the system never reports "ready" (they must never stay invisible).
   for (const w of [win.tl, win.br, win.dot]) {
     w.once('ready-to-show', () => {
       if (!hidden) w.showInactive();
+      shape(w, SHAPES[w === win.tl ? 'tl' : w === win.br ? 'br' : 'dot']);
     });
   }
+  setTimeout(() => {
+    for (const w of [win.tl, win.br, win.dot]) if (!hidden && !w.isDestroyed() && !w.isVisible()) w.showInactive();
+  }, 4000);
+  shape(win.bar, TINY); // the bar reports its answer's size once it has one
+  try {
+    setFrameBounds(region);
+  } catch (e) {
+    logError('frame', e);
+  }
+
 }
 
 function placeBar(display) {
@@ -455,6 +469,25 @@ async function ask(deep) {
   }
 }
 
+// Errors go to speck.log next to the settings (and into Copy diagnostics), so a problem on any
+// computer can be seen and fixed instead of failing silently.
+const LOG_FILE = path.join(path.dirname(settingsFile()), 'speck.log');
+const recentErrors = [];
+function logError(where, e) {
+  const line = `${new Date().toISOString()} [${where}] ${(e && (e.stack || e.message)) || e}`;
+  recentErrors.unshift(line.split('\n')[0]);
+  recentErrors.length = Math.min(recentErrors.length, 10);
+  try {
+    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 200000) fs.renameSync(LOG_FILE, `${LOG_FILE}.old`);
+    fs.appendFileSync(LOG_FILE, `${line}\n`);
+  } catch {
+    // nowhere to log
+  }
+}
+process.on('uncaughtException', (e) => logError('uncaught', e));
+process.on('unhandledRejection', (e) => logError('unhandled', e));
+
 function logAsk(entry) {
   askLog.unshift({ at: new Date().toLocaleString(), ...entry });
   askLog.length = Math.min(askLog.length, 20);
@@ -462,6 +495,14 @@ function logAsk(entry) {
 
 // ---------------------------------------------------------------------------
 // Diagnostics + speed test (to make every computer as quick as the Mac)
+
+function step2(fn) {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+}
 
 async function diagnosticsText() {
   let gpu = null;
@@ -496,6 +537,8 @@ async function diagnosticsText() {
       freeGb: Math.round(os.freemem() / 1e9),
     },
     gpu,
+    nvidia: step2(() => require('../shared/hardware').detectGpu()),
+    errors: recentErrors,
     ollama: ollamaInfo,
     settings: settings.get(),
     asks: askLog,
@@ -850,13 +893,22 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => globalShortcut.unregisterAll());
 
   app.whenReady().then(() => {
-    if (IS_MAC && app.dock) app.dock.hide();
-    registerIpc();
-    createOverlays();
-    const failed = registerHotkeys();
-    updateTray();
+    const step = (name, fn, fallback) => {
+      try {
+        return fn();
+      } catch (e) {
+        logError(`startup:${name}`, e);
+        return fallback;
+      }
+    };
+    logError('startup', `Speck ${app.getVersion()} (${LOADED_BUILD}) starting on ${process.platform} ${os.release()}`);
+    step('dock', () => IS_MAC && app.dock && app.dock.hide());
+    step('ipc', registerIpc);
+    step('overlays', createOverlays);
+    const failed = step('hotkeys', registerHotkeys, []);
+    step('tray', updateTray);
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, validatePositions);
-    if (settings.get().shareAi && !share.shareActive()) share.setShare(true);
+    step('share', () => settings.get().shareAi && !share.shareActive() && share.setShare(true));
     setTimeout(async () => {
       if (failed.length) showError(`Hotkey unavailable: ${failed.join(', ')} (change it in Settings)`, 8000);
       else {
