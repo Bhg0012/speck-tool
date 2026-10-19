@@ -23,6 +23,7 @@ const { recommend } = require('../shared/speed');
 const { Ollama } = require('./ollama');
 const { solve, resolveModels, NUM_CTX } = require('./solver');
 const { captureRegion } = require('./capture');
+const monitors = require('./monitors');
 const { RECOMMENDED_MODELS, settingsFile } = require('../shared/defaults');
 const { readVersionInfo, versionLabels } = require('../shared/version');
 
@@ -50,6 +51,7 @@ const win = { tl: null, br: null, dot: null, frame: null, bar: null, settings: n
 let tray = null;
 let hidden = false;
 let barHasContent = false;
+let barPayload = null; // what the answer bar shows, so it can be re-shown on another monitor
 let lastResult = null;
 let job = null;
 let jobId = 0;
@@ -122,6 +124,26 @@ function validatePositions() {
   reshapeSmall(); // a display's scaling may have changed
 }
 
+// Moves the capture area, the dot and the answer to the next monitor, in the same layout.
+function switchMonitor() {
+  const displays = screen.getAllDisplays();
+  if (displays.length < 2 || drag) return;
+  const region = currentRegion();
+  const from = screen.getDisplayMatching(region);
+  const to = monitors.nextDisplay(displays, from.id);
+  const r = monitors.moveRegion(region, from.workArea, to.workArea);
+  const [dx, dy] = win.dot.getPosition();
+  const dotFrom = screen.getDisplayMatching({ x: dx, y: dy, width: DOT, height: DOT });
+  const d = dotFrom.id === to.id ? { x: dx, y: dy } : monitors.moveDot({ x: dx, y: dy }, DOT, dotFrom.workArea, to.workArea);
+  settings.update({ region: r, dotPosition: d });
+  placeHandles(r);
+  moveSmall(win.dot, d.x, d.y);
+  reshapeSmall();
+  placeBar(to);
+  if (barHasContent && barPayload) barShow(barPayload); // re-drawn (and re-trimmed) for the new width
+  flashFrame();
+}
+
 function resetPositions() {
   settings.update({ region: null, dotPosition: null });
   validatePositions();
@@ -165,6 +187,9 @@ function overlay(role, bounds, { clickThrough = false } = {}) {
   w.setAlwaysOnTop(true, 'screen-saver');
   if (IS_MAC) w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   if (clickThrough) w.setIgnoreMouseEvents(true, { forward: true });
+  // macOS lets clicks fall through see-through pixels unless told otherwise. Saying so means the
+  // markers and dot need no faint background to stay grabbable.
+  else if (IS_MAC) w.setIgnoreMouseEvents(false);
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   w.webContents.on('will-navigate', (e) => e.preventDefault());
   w.webContents.on('did-finish-load', () => w.webContents.send('appearance', settings.get().appearance));
@@ -299,6 +324,7 @@ function send(w, channel, payload) {
 
 function barShow(payload) {
   barHasContent = true;
+  barPayload = payload;
   send(win.bar, 'bar', payload);
   // Shown even in hidden ("ghost") mode: a hotkey ask still gets its tiny answer.
   win.bar.showInactive();
@@ -691,6 +717,9 @@ function menuTemplate() {
     { label: 'Copy answer', click: copyAnswer, enabled: !!lastResult, ...acc('copy') },
     { type: 'separator' },
     { label: hidden ? 'Show' : 'Hide', click: toggle, ...acc('toggle') },
+    ...(screen.getAllDisplays().length > 1
+      ? [{ label: screen.getAllDisplays().length > 2 ? 'Switch to next monitor' : 'Switch to other monitor', click: switchMonitor }]
+      : []),
     { label: 'Reset capture area', click: resetPositions },
     { label: 'History…', click: openHistory, ...acc('history') },
     { label: 'Copy diagnostics', click: copyDiagnostics },
@@ -961,7 +990,12 @@ if (!app.requestSingleInstanceLock()) {
     step('overlays', createOverlays);
     const failed = step('hotkeys', registerHotkeys, []);
     step('tray', updateTray);
-    for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, validatePositions);
+    for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) {
+      screen.on(ev, () => {
+        validatePositions();
+        updateTrayMenu(); // shows/hides "Switch to other monitor"
+      });
+    }
     step('share', () => settings.get().shareAi && !share.shareActive() && share.setShare(true));
     setTimeout(async () => {
       if (failed.length) showError(`Hotkey unavailable: ${failed.join(', ')} (change it in Settings)`, 8000);

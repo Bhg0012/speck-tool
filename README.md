@@ -72,6 +72,7 @@ once GitHub access works.
 - **Ghost mode:** while everything is hidden, the Ask hotkey still works. Only the tiny answer appears.
 - **History:** the last 30 questions and answers, newest first, each with a **Copy** button that copies the whole question and answer. Older entries are deleted automatically. It's text only (about 1 KB each, roughly 30 KB in total) and stays on this computer. Use **Clear** to wipe it, or turn history off in Settings.
 - Drag the dot anywhere you like. Speck remembers the positions.
+- **Two monitors:** right-click the dot, then *Switch to other monitor*. The corners, the dot and the answer all move to the other screen in the same layout (with three or more it says *Switch to next monitor* and goes left to right).
 - All hotkeys can be changed in Settings.
 
 ## Same speed on every computer

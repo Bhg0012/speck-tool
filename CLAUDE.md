@@ -16,6 +16,7 @@ When Bruce shares a new idea, preference or insight in a chat:
 - `scripts/start.js` - cross-platform launcher logic (update, deps, Ollama, model pull, start).
 - `scripts/update.js` - syncs the folder to the latest `main` on GitHub; writes `.speck-version.json`.
 - `src/shared/version.js` - version/commit/update-date lines for the right-click menu.
+- `src/main/monitors.js` - "Switch to other monitor" layout maths (pure, unit-tested).
 - `src/main/share.js` - share this computer's Ollama on the home network; fallback to local when a shared one is down.
 - `src/main/diagnostics.js`, `src/shared/speed.js` - "Copy diagnostics" report and speed-test advice.
 - `src/shared/hardware.js` - detects the graphics card (nvidia-smi / Apple silicon) and picks the model that fits.

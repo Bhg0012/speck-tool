@@ -58,6 +58,9 @@ philosophy.
   Text at the bottom appears only when the answer is ready.
 - Right-click the dot for the menu: version number + when it was updated (to confirm
   updates landed), history, settings, restart, quit. There's also a quit hotkey.
+- With two (or more) monitors the menu has **"Switch to other monitor"**: the corners, the dot
+  and the answer all jump to the other screen in the same layout (the capture area keeps its size
+  and relative spot; the dot keeps its distance from its corner). No dragging each part across.
 
 ### History
 - The last 30 questions and answers (text only, never screenshots, ~30 KB in total, on this
@@ -181,3 +184,9 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   area. Fix: everything is drawn from the window's top-left, the windows are always sized exactly,
   and the trim is redone when a window moves to a screen with different scaling. **Every part
   (both brackets, the dot, the answer) must be visible and usable on Windows, exactly like the Mac.**
+- **2026-10-19** - With two monitors it was annoying to drag each part to the other screen. Added
+  "Switch to other monitor" to the dot's menu: everything moves over in the same layout.
+- **2026-10-19** - On the Mac a faint little box showed behind the brackets: not discreet. Cause: a 1%
+  tint filled each bracket/dot window so it could be clicked. Removed: nothing is drawn behind the
+  marks now (the Mac window is told to take clicks anyway; only a 1/255 grab area hugs each mark).
+  **No hue, box or tint around any mark, ever, on any OS.**

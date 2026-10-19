@@ -30,13 +30,30 @@ body {
   display: none;
 }
 
-/* Near-zero alpha keeps grabbable windows hit-testable on every OS without being visible. */
+/* No background behind the marks: even a 1% tint showed as a faint square on the Mac.
+   The main process makes the whole window clickable on the Mac (and trims it on Windows); these
+   1/255-alpha areas, the same L and round shapes as SHAPES in main.js, keep the marks easy to
+   grab even where an OS only clicks on drawn pixels. Too faint to see. */
 body[data-role='tl'],
 body[data-role='br'],
 body[data-role='dot'] {
-  background: rgba(0, 0, 0, 0.01);
+  background: transparent;
   cursor: default; /* normal arrow; Windows draws "grab" as a hand */
 }
+body[data-role='tl']::before,
+body[data-role='tl']::after,
+body[data-role='br']::before,
+body[data-role='br']::after,
+body[data-role='dot']::before {
+  content: '';
+  position: absolute;
+  background: rgba(0, 0, 0, 0.005);
+}
+body[data-role='tl']::before { left: 3px; top: 3px; width: 19px; height: 9px; }
+body[data-role='tl']::after { left: 3px; top: 12px; width: 9px; height: 10px; }
+body[data-role='br']::before { left: 6px; top: 16px; width: 19px; height: 9px; }
+body[data-role='br']::after { left: 16px; top: 6px; width: 9px; height: 10px; }
+body[data-role='dot']::before { left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 50%; }
 
 /* ---- corner markers ---- */
 body[data-role='tl'] .corner,
