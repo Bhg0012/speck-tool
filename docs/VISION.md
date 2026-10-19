@@ -175,3 +175,9 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   RTX 3050 Ti Laptop GPU (4 GB)** + Intel Iris Xe. The 8B model (~7 GB) didn't fit the 4 GB card and
   ran mostly on the CPU. The launcher now picks the model for the graphics card automatically
   (4 GB NVIDIA -> qwen3-vl:4b-instruct; Apple silicon -> 8b), and the context is trimmed to fit 4 GB.
+- **2026-10-19** - On Windows only the top-left bracket showed: no bottom-right bracket and no dot,
+  so Speck couldn't be used. Cause: Windows can make a brand-new tiny window bigger than asked, and
+  the bottom-right bracket and dot were drawn from the window's far edge/centre, outside the trimmed
+  area. Fix: everything is drawn from the window's top-left, the windows are always sized exactly,
+  and the trim is redone when a window moves to a screen with different scaling. **Every part
+  (both brackets, the dot, the answer) must be visible and usable on Windows, exactly like the Mac.**

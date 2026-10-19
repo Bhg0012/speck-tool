@@ -94,8 +94,23 @@ function currentRegion() {
 }
 
 function placeHandles(r) {
-  win.tl.setPosition(Math.round(r.x - PAD), Math.round(r.y - PAD));
-  win.br.setPosition(Math.round(r.x + r.width - HANDLE + PAD), Math.round(r.y + r.height - HANDLE + PAD));
+  moveSmall(win.tl, r.x - PAD, r.y - PAD);
+  moveSmall(win.br, r.x + r.width - HANDLE + PAD, r.y + r.height - HANDLE + PAD);
+}
+
+// The markers and dot are tiny windows. Windows can make a new tiny window bigger than asked
+// (its minimum window size), so they are always moved with their exact size, never setPosition.
+function roleOf(w) {
+  return w === win.tl ? 'tl' : w === win.br ? 'br' : w === win.dot ? 'dot' : null;
+}
+
+function sizeOf(w) {
+  return roleOf(w) === 'dot' ? DOT : HANDLE;
+}
+
+function moveSmall(w, x, y) {
+  const n = sizeOf(w);
+  w.setBounds({ x: Math.round(x), y: Math.round(y), width: n, height: n });
 }
 
 function validatePositions() {
@@ -103,7 +118,8 @@ function validatePositions() {
   const region = s.region && onSomeScreen(s.region) ? s.region : defaultRegion();
   const dot = s.dotPosition && onSomeScreen({ ...s.dotPosition, width: DOT, height: DOT }) ? s.dotPosition : defaultDot();
   if (win.tl) placeHandles(region);
-  if (win.dot) win.dot.setPosition(Math.round(dot.x), Math.round(dot.y));
+  if (win.dot) moveSmall(win.dot, dot.x, dot.y);
+  reshapeSmall(); // a display's scaling may have changed
 }
 
 function resetPositions() {
@@ -178,6 +194,24 @@ const SHAPES = {
 };
 const TINY = [{ x: 0, y: 0, width: 1, height: 1 }];
 
+// The trim is stored in physical pixels for the display the window is on, so it's redone
+// whenever a window may have moved to a display with different scaling.
+function reshapeSmall() {
+  for (const w of [win.tl, win.br, win.dot]) if (w) shape(w, SHAPES[roleOf(w)]);
+}
+
+// Logged once per window (speck.log and Copy diagnostics) if Windows still won't size it exactly.
+const sizeLogged = new Set();
+function checkSize(w) {
+  const role = roleOf(w);
+  const [width, height] = w.getSize();
+  const n = sizeOf(w);
+  if ((width !== n || height !== n) && !sizeLogged.has(role)) {
+    sizeLogged.add(role);
+    logError('size', `${role} window is ${width}x${height}, expected ${n}x${n} (drawn from its top-left, so still visible)`);
+  }
+}
+
 let shapeBroken = false;
 function shape(w, rects) {
   if (!CAN_SHAPE || shapeBroken || !settings.get().appearance.trimWindows || !w || w.isDestroyed()) return;
@@ -194,6 +228,7 @@ function setFrameBounds(r) {
   win.frame.setBounds(r);
   const t = 2;
   const { width: W, height: H } = r;
+  send(win.frame, 'frame', { width: W, height: H }); // drawn at this size even if the window is bigger
   shape(win.frame, [
     { x: 0, y: 0, width: W, height: t },
     { x: 0, y: Math.max(0, H - t), width: W, height: t },
@@ -217,13 +252,25 @@ function createOverlays() {
   // Show the dot and corners as soon as they're ready, and again after a few seconds in case
   // the system never reports "ready" (they must never stay invisible).
   for (const w of [win.tl, win.br, win.dot]) {
+    const [x, y] = w.getPosition();
+    moveSmall(w, x, y);
     w.once('ready-to-show', () => {
+      const [wx, wy] = w.getPosition();
+      moveSmall(w, wx, wy);
       if (!hidden) w.showInactive();
-      shape(w, SHAPES[w === win.tl ? 'tl' : w === win.br ? 'br' : 'dot']);
+      shape(w, SHAPES[roleOf(w)]);
+      checkSize(w);
     });
   }
   setTimeout(() => {
-    for (const w of [win.tl, win.br, win.dot]) if (!hidden && !w.isDestroyed() && !w.isVisible()) w.showInactive();
+    for (const w of [win.tl, win.br, win.dot]) {
+      if (w.isDestroyed()) continue;
+      if (!hidden && !w.isVisible()) w.showInactive();
+      const [x, y] = w.getPosition();
+      moveSmall(w, x, y);
+      shape(w, SHAPES[roleOf(w)]);
+      checkSize(w);
+    }
   }, 4000);
   shape(win.bar, TINY); // the bar reports its answer's size once it has one
   try {
@@ -326,7 +373,8 @@ function dragStart(e, role) {
   if (!w || drag) return;
   const [wx, wy] = w.getPosition();
   const c = screen.getCursorScreenPoint();
-  drag = { role, w, ox: c.x - wx, oy: c.y - wy, sx: c.x, sy: c.y, moved: 0, started: Date.now() };
+  const scale = screen.getDisplayMatching(w.getBounds()).scaleFactor;
+  drag = { role, w, ox: c.x - wx, oy: c.y - wy, sx: c.x, sy: c.y, moved: 0, started: Date.now(), scale };
   if (role !== 'dot') {
     setFrameBounds(currentRegion());
     win.frame.showInactive();
@@ -341,8 +389,14 @@ function dragTick() {
   const c = screen.getCursorScreenPoint();
   drag.moved = Math.max(drag.moved, Math.abs(c.x - drag.sx) + Math.abs(c.y - drag.sy));
   if (drag.role === 'dot' && drag.moved < CLICK_SLOP) return;
-  drag.w.setPosition(Math.round(c.x - drag.ox), Math.round(c.y - drag.oy));
+  moveSmall(drag.w, c.x - drag.ox, c.y - drag.oy);
   if (drag.role !== 'dot') setFrameBounds(currentRegion());
+  // Crossed onto a display with different scaling: redo the trim so nothing gets clipped.
+  const scale = screen.getDisplayMatching(drag.w.getBounds()).scaleFactor;
+  if (scale !== drag.scale) {
+    drag.scale = scale;
+    shape(drag.w, SHAPES[drag.role]);
+  }
 }
 
 function dragEnd() {
