@@ -52,7 +52,14 @@ speck.on('pulse', () => {
 
 speck.on('busy', (on) => $('.dot').classList.toggle('busy', !!on));
 
-speck.on('frame', ({ visible }) => $('.frame').classList.toggle('show', visible));
+speck.on('frame', ({ visible, width, height }) => {
+  const f = $('.frame');
+  if (width && height) {
+    f.style.setProperty('--fw', `${width}px`);
+    f.style.setProperty('--fh', `${height}px`);
+  }
+  if (visible !== undefined) f.classList.toggle('show', visible);
+});
 
 // ---- answer bar ----
 if (role === 'bar') {
