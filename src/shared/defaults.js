@@ -31,6 +31,7 @@ const DEFAULTS = {
     autoHideSeconds: 0, // 0 = keep the answer until the next one
   },
   showTray: true,
+  shareAi: false, // let other computers on the home network use this computer's Ollama
   saveHistory: true, // keep the last 30 questions + answers (text only, on this computer)
   region: null, // { x, y, width, height } in screen points
   dotPosition: null, // { x, y }

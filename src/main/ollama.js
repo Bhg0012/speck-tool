@@ -67,6 +67,11 @@ class Ollama {
     return (data.models || []).map((m) => ({ name: m.name, size: m.size || 0 }));
   }
 
+  // Models currently loaded in memory (size vs size_vram shows GPU use).
+  async ps() {
+    return (await this.request('/api/ps', { timeoutMs: 5000 })).models || [];
+  }
+
   async capabilities(model) {
     if (this.caps.has(model)) return this.caps.get(model);
     const data = await this.request('/api/show', { method: 'POST', body: { model }, timeoutMs: 10000 });
@@ -98,7 +103,19 @@ class Ollama {
       try {
         const data = await this.request('/api/chat', { method: 'POST', body, signal, timeoutMs });
         const msg = data.message || {};
-        return { content: msg.content || '', thinking: msg.thinking || '' };
+        const sec = (ns) => Math.round((ns || 0) / 1e7) / 100;
+        return {
+          content: msg.content || '',
+          thinking: msg.thinking || '',
+          // timing from Ollama: loading the model, reading the prompt (incl. the image), writing the answer
+          stats: {
+            loadS: sec(data.load_duration),
+            promptTokens: data.prompt_eval_count || 0,
+            promptS: sec(data.prompt_eval_duration),
+            genTokens: data.eval_count || 0,
+            genS: sec(data.eval_duration),
+          },
+        };
       } catch (e) {
         if (!(e instanceof OllamaError) || e.status !== 400) throw e;
         if ('think' in body && /think/i.test(e.message)) delete body.think;

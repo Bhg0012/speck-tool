@@ -276,6 +276,65 @@ function bindRange(id) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Speed test + diagnostics
+
+function fmtS(s) {
+  return s >= 90 ? `${Math.round(s / 60)} min` : `${s.toFixed(1)} s`;
+}
+
+async function runSpeedTest() {
+  const btn = $('speed-run');
+  const box = $('speed-result');
+  btn.disabled = true;
+  btn.textContent = 'Testing… (up to a few minutes on slow PCs)';
+  box.hidden = false;
+  box.className = 'speed';
+  $('speed-numbers').textContent = '';
+  $('speed-advice').textContent = 'Answering a sample question with your current model…';
+  $('speed-actions').innerHTML = '';
+  const r = await speck.invoke('speed:test');
+  btn.disabled = false;
+  btn.textContent = 'Run speed test again';
+  if (!r.ok) {
+    $('speed-advice').textContent = r.error;
+    return;
+  }
+  box.className = `speed ${r.advice.level}`;
+  $('speed-numbers').textContent =
+    `${r.model}: Careful ${fmtS(r.carefulS)} · Fast ${fmtS(r.fastS)} · reading the screen ${fmtS(r.readS)} · ` +
+    `writing ${r.genTps.toFixed(1)} words/s · sample answer ${r.correct ? 'correct' : `WRONG (${r.answer})`}`;
+  $('speed-advice').textContent = r.advice.text;
+  for (const a of r.advice.actions) {
+    const b = el('button', { class: 'small' }, a.label);
+    b.onclick = async () => {
+      if (a.type === 'mode') {
+        save({ mode: a.value });
+        seg('mode', a.value, (v) => {
+          save({ mode: v });
+          $('mode-hint').textContent = MODE_HINTS[v];
+        });
+        $('mode-hint').textContent = MODE_HINTS[a.value];
+        b.textContent = 'Done';
+      } else if (a.type === 'model') {
+        if (!installed.some((m) => m.name === a.value)) {
+          b.textContent = 'Downloading…';
+          b.disabled = true;
+          await pull(a.value);
+        }
+        if (installed.some((m) => m.name === a.value)) {
+          save({ readerModel: a.value });
+          renderModels();
+          b.textContent = 'Done. Run the test again';
+        } else {
+          b.textContent = 'Download failed';
+        }
+      }
+    };
+    $('speed-actions').append(b);
+  }
+}
+
 async function init() {
   state = await speck.invoke('settings:get');
   const s = state.settings;
@@ -312,6 +371,32 @@ async function init() {
   $('showTray').checked = s.showTray;
   $('showTray').onchange = (e) => save({ showTray: e.target.checked });
   $('reset-area').onclick = () => speck.invoke('app:reset-area');
+  $('speed-run').onclick = runSpeedTest;
+  const showShare = (on, urls) => {
+    $('share-info').hidden = !on;
+    $('share-info').textContent = urls && urls.length
+      ? `On your other computer, open Speck Settings and set AI server to: ${urls.join('  or  ')}`
+      : 'Sharing is on, but this computer has no network address right now.';
+  };
+  speck.invoke('share:get').then((sh) => {
+    $('shareAi').checked = sh.on;
+    showShare(sh.on, sh.urls);
+    if (sh.platform === 'linux') $('shareAi').parentElement.hidden = true;
+  });
+  $('shareAi').onchange = async (e) => {
+    const on = e.target.checked;
+    $('share-info').hidden = false;
+    $('share-info').textContent = 'Restarting Ollama…';
+    const r = await speck.invoke('share:set', on);
+    if (!r.ok) $('share-info').textContent = r.error;
+    else showShare(on, r.urls);
+    setTimeout(refreshOllama, 3000);
+  };
+  $('diag-copy').onclick = async () => {
+    await speck.invoke('diag:copy');
+    $('diag-copy').textContent = 'Copied. Paste to Claude';
+    setTimeout(() => ($('diag-copy').textContent = 'Copy diagnostics'), 2500);
+  };
   $('quit').onclick = () => speck.invoke('app:quit');
 
   renderHotkeys();

@@ -1,7 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-const SEND = new Set(['drag:start', 'drag:end', 'dot:menu', 'bar:hover', 'bar:copy', 'bar:dismiss']);
+const SEND = new Set(['drag:start', 'drag:end', 'dot:menu', 'bar:hover', 'bar:copy', 'bar:dismiss', 'bar:shape']);
 const INVOKE = new Set([
   'settings:get',
   'settings:save',
@@ -15,6 +15,10 @@ const INVOKE = new Set([
   'history:copy',
   'history:clear',
   'history:close',
+  'speed:test',
+  'diag:copy',
+  'share:get',
+  'share:set',
 ]);
 const ON = new Set(['appearance', 'bar', 'frame', 'pulse', 'busy', 'pull:progress', 'history:changed']);
 

@@ -1,4 +1,5 @@
 'use strict';
+const os = require('os');
 const path = require('path');
 const {
   app,
@@ -15,6 +16,9 @@ const {
 } = require('electron');
 const { Settings } = require('./settings');
 const { History, entryText } = require('./history');
+const { buildDiagnostics } = require('./diagnostics');
+const share = require('./share');
+const { recommend } = require('../shared/speed');
 const { Ollama } = require('./ollama');
 const { solve, resolveModels, NUM_CTX } = require('./solver');
 const { captureRegion } = require('./capture');
@@ -38,6 +42,7 @@ app.setPath('userData', path.dirname(settingsFile()));
 
 const settings = new Settings(settingsFile());
 const ollama = new Ollama(settings.get().ollamaUrl);
+const localOllama = new Ollama('http://127.0.0.1:11434'); // fallback when a remote (e.g. the Mac) is unreachable
 const history = new History(path.join(path.dirname(settingsFile()), 'history.json'));
 
 const win = { tl: null, br: null, dot: null, frame: null, bar: null, settings: null, history: null };
@@ -50,6 +55,8 @@ let jobId = 0;
 let drag = null;
 let autoHideTimer = null;
 let askedScreenPermission = false;
+const askLog = []; // timing of recent asks, newest first (for Copy diagnostics)
+const SLOW_MS = 40000; // answers slower than this get a hint to run the speed test
 let permissionWatch = null;
 
 // ---------------------------------------------------------------------------
@@ -123,6 +130,7 @@ function overlay(role, bounds, { clickThrough = false } = {}) {
     // Windows: without these a borderless window still gets a faint system frame/shadow box.
     thickFrame: false,
     roundedCorners: false,
+    backgroundMaterial: 'none',
     focusable: false,
     acceptFirstMouse: true,
     alwaysOnTop: true,
@@ -148,6 +156,45 @@ function overlay(role, bounds, { clickThrough = false } = {}) {
   return w;
 }
 
+// Windows (and Linux): clip each overlay window to what it actually draws, so the OS has no
+// see-through area left to paint a faint backdrop "box" into. macOS draws nothing there and
+// has no setShape. Rects are in window coordinates.
+const CAN_SHAPE = !IS_MAC;
+const SHAPES = {
+  // L-shaped areas hugging the corner brackets (bracket corner sits at PAD in a HANDLE window)
+  tl: [
+    { x: 3, y: 3, width: 19, height: 9 },
+    { x: 3, y: 12, width: 9, height: 10 },
+  ],
+  br: [
+    { x: 6, y: 16, width: 19, height: 9 },
+    { x: 16, y: 6, width: 9, height: 10 },
+  ],
+  // a small rounded area around the 7 px dot (centred in a DOT window)
+  dot: [
+    { x: 6, y: 4, width: 10, height: 14 },
+    { x: 4, y: 6, width: 14, height: 10 },
+  ],
+};
+const TINY = [{ x: 0, y: 0, width: 1, height: 1 }];
+
+function shape(w, rects) {
+  if (CAN_SHAPE && w && !w.isDestroyed()) w.setShape(rects);
+}
+
+// The drag outline: just its four 2 px edges.
+function setFrameBounds(r) {
+  win.frame.setBounds(r);
+  const t = 2;
+  const { width: W, height: H } = r;
+  shape(win.frame, [
+    { x: 0, y: 0, width: W, height: t },
+    { x: 0, y: Math.max(0, H - t), width: W, height: t },
+    { x: 0, y: 0, width: t, height: H },
+    { x: Math.max(0, W - t), y: 0, width: t, height: H },
+  ]);
+}
+
 function createOverlays() {
   const s = settings.get();
   const region = s.region && onSomeScreen(s.region) ? s.region : defaultRegion();
@@ -160,6 +207,11 @@ function createOverlays() {
   win.frame.setIgnoreMouseEvents(true);
   win.bar = overlay('bar', { x: 0, y: 0, width: 800, height: BAR_H }, { clickThrough: true });
   placeBar(screen.getDisplayMatching(region));
+  shape(win.tl, SHAPES.tl);
+  shape(win.br, SHAPES.br);
+  shape(win.dot, SHAPES.dot);
+  shape(win.bar, TINY); // the bar reports its answer's size once it has one
+  setFrameBounds(region);
 
   for (const w of [win.tl, win.br, win.dot]) {
     w.once('ready-to-show', () => {
@@ -241,7 +293,7 @@ function toggle() {
 
 function flashFrame(ms = 900) {
   if (hidden) return;
-  win.frame.setBounds(currentRegion());
+  setFrameBounds(currentRegion());
   win.frame.showInactive();
   send(win.frame, 'frame', { visible: true });
   setTimeout(() => {
@@ -262,7 +314,7 @@ function dragStart(e, role) {
   const c = screen.getCursorScreenPoint();
   drag = { role, w, ox: c.x - wx, oy: c.y - wy, sx: c.x, sy: c.y, moved: 0, started: Date.now() };
   if (role !== 'dot') {
-    win.frame.setBounds(currentRegion());
+    setFrameBounds(currentRegion());
     win.frame.showInactive();
     send(win.frame, 'frame', { visible: true });
   }
@@ -276,7 +328,7 @@ function dragTick() {
   drag.moved = Math.max(drag.moved, Math.abs(c.x - drag.sx) + Math.abs(c.y - drag.sy));
   if (drag.role === 'dot' && drag.moved < CLICK_SLOP) return;
   drag.w.setPosition(Math.round(c.x - drag.ox), Math.round(c.y - drag.oy));
-  if (drag.role !== 'dot') win.frame.setBounds(currentRegion());
+  if (drag.role !== 'dot') setFrameBounds(currentRegion());
 }
 
 function dragEnd() {
@@ -357,14 +409,17 @@ async function ask(deep) {
   if (rect.width < 10 || rect.height < 10) return showError('Capture area is too small');
   placeBar(screen.getDisplayMatching(rect));
 
+  const t0 = Date.now();
   let shot;
   try {
     if (!(await screenPermissionOk())) return;
     shot = await grab(rect);
   } catch (e) {
+    logAsk({ mode: deep ? 'max' : settings.get().mode, totalMs: Date.now() - t0, captureMs: Date.now() - t0, error: e.message });
     return showError(e.message || 'Screen capture failed');
   }
   if (id !== jobId) return;
+  const captureMs = Date.now() - t0;
 
   send(win.tl, 'pulse');
   send(win.br, 'pulse');
@@ -373,24 +428,115 @@ async function ask(deep) {
   if (barHasContent) barClear();
   const s = settings.get();
   try {
+    const route = await share.pickOllama(ollama, localOllama, s.ollamaUrl);
     const result = await solve({
       image: shot.base64,
       settings: s,
-      ollama,
+      ollama: route.client,
       mode: deep ? 'max' : s.mode,
       signal: controller.signal,
     });
     if (id !== jobId) return;
+    const totalMs = Date.now() - t0;
+    logAsk({ mode: result.mode, totalMs, captureMs, answer: result.answer, confidence: result.confidence, calls: result.calls });
+    result.slow = totalMs > SLOW_MS;
+    result.fallback = route.fallback;
     lastResult = result;
     showAnswer(result);
   } catch (e) {
     if (controller.signal.aborted || id !== jobId) return;
+    logAsk({ mode: deep ? 'max' : s.mode, totalMs: Date.now() - t0, captureMs, error: e.message });
     showError(e.message || 'Something went wrong');
   } finally {
     if (id === jobId) {
       job = null;
       send(win.dot, 'busy', false);
     }
+  }
+}
+
+function logAsk(entry) {
+  askLog.unshift({ at: new Date().toLocaleString(), ...entry });
+  askLog.length = Math.min(askLog.length, 20);
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics + speed test (to make every computer as quick as the Mac)
+
+async function diagnosticsText() {
+  let gpu = null;
+  try {
+    gpu = await app.getGPUInfo('complete');
+  } catch {
+    try {
+      gpu = await app.getGPUInfo('basic');
+    } catch {
+      gpu = null;
+    }
+  }
+  const ollamaInfo = { ok: false };
+  try {
+    ollamaInfo.version = await ollama.version();
+    ollamaInfo.models = await ollama.list();
+    ollamaInfo.running = await ollama.ps();
+    ollamaInfo.ok = true;
+  } catch (e) {
+    ollamaInfo.error = e.message;
+  }
+  const cpus = os.cpus();
+  return buildDiagnostics({
+    app: { version: app.getVersion(), commit: LOADED_BUILD },
+    system: {
+      platform: process.platform,
+      release: os.release(),
+      arch: process.arch,
+      cpu: (cpus[0] && cpus[0].model) || '?',
+      cores: cpus.length,
+      ramGb: Math.round(os.totalmem() / 1e9),
+      freeGb: Math.round(os.freemem() / 1e9),
+    },
+    gpu,
+    ollama: ollamaInfo,
+    settings: settings.get(),
+    asks: askLog,
+  });
+}
+
+async function copyDiagnostics() {
+  clipboard.writeText(await diagnosticsText());
+  barShow({ kind: 'note', text: 'Diagnostics copied. Paste them to Claude' });
+  clearTimeout(autoHideTimer);
+  autoHideTimer = setTimeout(barClear, 4000);
+}
+
+// One real answer on a built-in sample question, timed. Careful mode = this + one more
+// attempt that reuses the processed image, so only the writing time repeats.
+async function speedTest() {
+  const s = settings.get();
+  try {
+    const m = await resolveModels(ollama, s);
+    const t0 = Date.now();
+    await ollama.warm(m.reader, s.keepAlive, NUM_CTX);
+    const loadS = (Date.now() - t0) / 1000;
+    // Change one pixel so Ollama can't reuse a cached copy of the sample image.
+    const img = nativeImage.createFromPath(path.join(ASSETS, 'speedtest.png'));
+    const size = img.getSize();
+    const bmp = img.toBitmap();
+    const i = 4 * Math.floor(Math.random() * size.width * size.height);
+    bmp[i] = (bmp[i] + 1) % 256;
+    const fresh = nativeImage.createFromBitmap(bmp, size).toPNG().toString('base64');
+    const t1 = Date.now();
+    const r = await solve({ image: fresh, settings: s, ollama, mode: 'fast', timeoutScale: 2 });
+    const fastS = (Date.now() - t1) / 1000;
+    const last = r.calls[r.calls.length - 1] || { genS: 0, genTokens: 0, promptS: 0 };
+    const carefulS = fastS + last.genS;
+    const genTps = last.genS ? last.genTokens / last.genS : 0;
+    const correct = /\b75\b/.test(r.answer);
+    const measured = { model: m.reader, mode: s.mode, loadS, fastS, carefulS, readS: last.promptS, genTps, correct, answer: r.answer };
+    logAsk({ mode: 'speed test', totalMs: Date.now() - t1, captureMs: 0, answer: r.answer, confidence: r.confidence, calls: r.calls });
+    return { ok: true, ...measured, advice: recommend(measured) };
+  } catch (e) {
+    return { ok: false, error: e.message };
   }
 }
 
@@ -450,6 +596,7 @@ function menuTemplate() {
     { label: hidden ? 'Show' : 'Hide', click: toggle, ...acc('toggle') },
     { label: 'Reset capture area', click: resetPositions },
     { label: 'History…', click: openHistory, ...acc('history') },
+    { label: 'Copy diagnostics', click: copyDiagnostics },
     { label: 'Settings…', click: openSettings, ...acc('settings') },
     { type: 'separator' },
     { label: 'Restart Speck', click: restartApp },
@@ -584,9 +731,10 @@ function applySettings() {
 
 async function warmModels(reportErrors = false) {
   try {
-    const m = await resolveModels(ollama, settings.get());
-    await ollama.warm(m.reader, settings.get().keepAlive, NUM_CTX);
-    if (m.solver !== m.reader) await ollama.warm(m.solver, settings.get().keepAlive, NUM_CTX);
+    const { client } = await share.pickOllama(ollama, localOllama, settings.get().ollamaUrl);
+    const m = await resolveModels(client, settings.get());
+    await client.warm(m.reader, settings.get().keepAlive, NUM_CTX);
+    if (m.solver !== m.reader) await client.warm(m.solver, settings.get().keepAlive, NUM_CTX);
   } catch (e) {
     if (reportErrors) showError(e.message, 8000);
   }
@@ -596,6 +744,10 @@ function registerIpc() {
   ipcMain.on('drag:start', dragStart);
   ipcMain.on('drag:end', dragEnd);
   ipcMain.on('dot:menu', () => Menu.buildFromTemplate(menuTemplate()).popup());
+  ipcMain.on('bar:shape', (_e, r) => {
+    const ok = r && [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0;
+    shape(win.bar, ok ? [{ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }] : TINY);
+  });
   ipcMain.on('bar:hover', (e, over) => {
     if (win.bar && !win.bar.isDestroyed()) win.bar.setIgnoreMouseEvents(!over, { forward: true });
   });
@@ -654,6 +806,16 @@ function registerIpc() {
   });
   ipcMain.handle('app:reset-area', resetPositions);
   ipcMain.handle('app:quit', () => app.quit());
+  ipcMain.handle('speed:test', speedTest);
+  ipcMain.handle('share:get', () => ({ on: settings.get().shareAi, urls: share.shareUrls(), platform: process.platform }));
+  ipcMain.handle('share:set', async (_e, on) => {
+    settings.update({ shareAi: !!on });
+    return share.setShare(!!on);
+  });
+  ipcMain.handle('diag:copy', async () => {
+    clipboard.writeText(await diagnosticsText());
+    return true;
+  });
   ipcMain.handle('history:list', () => ({ items: history.list(), enabled: settings.get().saveHistory }));
   ipcMain.handle('history:copy', (_e, at) => {
     const item = history.list().find((h) => h.at === at);
@@ -694,11 +856,14 @@ if (!app.requestSingleInstanceLock()) {
     const failed = registerHotkeys();
     updateTray();
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, validatePositions);
+    if (settings.get().shareAi && !share.shareActive()) share.setShare(true);
     setTimeout(async () => {
       if (failed.length) showError(`Hotkey unavailable: ${failed.join(', ')} (change it in Settings)`, 8000);
       else {
         try {
-          await ollama.version();
+          // The configured AI, or this computer's own if a shared one (e.g. the Mac) is unreachable.
+          const { client } = await share.pickOllama(ollama, localOllama, settings.get().ollamaUrl);
+          await client.version();
           warmModels(true);
         } catch (e) {
           showError(`${e.message}. Start Ollama, then try again`, 8000);
