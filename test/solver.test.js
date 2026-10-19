@@ -166,4 +166,5 @@ test('settings from older versions move to the fast instruct model', () => {
   assert.equal(m.keepAlive, '2h');
   assert.equal(m.appearance.showStatus, undefined);
   assert.equal(migrate({ configVersion: 2, readerModel: 'qwen3-vl:8b' }).readerModel, 'qwen3-vl:8b', 'explicit choice kept after v2');
+  assert.equal(migrate({ configVersion: 2, readerModel: 'qwen3-vl:8b' }).modelAuto, false);
 });

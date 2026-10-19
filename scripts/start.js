@@ -19,6 +19,7 @@ const path = require('path');
 const { DEFAULTS, settingsFile, merge, migrate } = require('../src/shared/defaults');
 const { update } = require('./update');
 const { ensureShortcuts } = require('./shortcut');
+const { detectGpu, pickModel } = require('../src/shared/hardware');
 const { readVersionInfo } = require('../src/shared/version');
 
 const ROOT = path.join(__dirname, '..');
@@ -60,6 +61,22 @@ function openUrl(url) {
     spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
   } catch {
     // ignore
+  }
+}
+
+function saveSettingsPatch(patch) {
+  try {
+    const file = settingsFile();
+    let raw = {};
+    try {
+      raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      // new file
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(merge(migrate(raw), patch), null, 2));
+  } catch (e) {
+    say(dim(`Couldn't save settings: ${e.message}`));
   }
 }
 
@@ -276,11 +293,21 @@ function pretty(acc) {
     .replace(/Alt/g, 'Option');
 }
 
-function launch(s) {
+function speckLogTail() {
+  try {
+    const lines = fs.readFileSync(path.join(path.dirname(settingsFile()), 'speck.log'), 'utf8').trim().split('\n');
+    return lines.slice(-4).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+async function launch(s) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   // A running Speck restarts itself when this build differs from the one it loaded.
   const args = [ROOT, `--speck-build=${readVersionInfo(ROOT).commit || 'dev'}`];
+  let child = null;
   if (IS_MAC) {
     // Launch through LaunchServices so macOS treats Speck as its own app ("Electron") for
     // Screen Recording, instead of inheriting Terminal's or Speck.app's permission.
@@ -288,9 +315,15 @@ function launch(s) {
     const bundle = path.resolve(electronPath(), '..', '..', '..');
     spawnSync('open', ['-n', '-g', '-a', bundle, '--args', ...args], { stdio: 'ignore' });
   } else {
-    const child = spawn(electronPath(), args, { cwd: ROOT, detached: true, stdio: 'ignore', env });
+    child = spawn(electronPath(), args, { cwd: ROOT, detached: true, stdio: 'ignore', env });
     child.unref();
   }
+  // Make sure it actually stayed up, so nothing ever fails silently.
+  await sleep(5000);
+  const crashed = child
+    ? child.exitCode !== null && child.exitCode !== 0
+    : spawnSync('pgrep', ['-f', '[-]-speck-build='], { encoding: 'utf8' }).status !== 0;
+  if (crashed) fail('Speck closed right after starting.', speckLogTail() || 'Run "Start Speck" again; if it keeps happening, send Claude the speck.log file.');
   const hk = s.hotkeys;
   say();
   say(`${mint('●')} Speck is running.`);
@@ -346,6 +379,16 @@ function selfUpdate() {
   if (ensureShortcuts(ROOT)) say(`${mint('◆')} Added a "Speck" shortcut (Speck icon) here and in the Start Menu. Use it to start Speck.`);
   ensureDeps();
   const s = loadSettings();
+  if (s.modelAuto) {
+    // Biggest model that fits this computer's graphics card = answers in seconds.
+    const gpu = detectGpu();
+    const best = pickModel(gpu);
+    if (best !== s.readerModel) {
+      s.readerModel = best;
+      saveSettingsPatch({ readerModel: best });
+    }
+    say(dim(`Model: ${best} (best fit for ${gpu.name}${gpu.vramGb ? `, ${gpu.vramGb} GB` : ''})`));
+  }
   let base = String(s.ollamaUrl).replace(/\/+$/, '');
   if (!/\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(base) && !(await ollamaUp(base))) {
     say(dim(`Can't reach the AI at ${base} right now (asleep or off?). Using this computer's Ollama instead.`));
@@ -359,6 +402,6 @@ function selfUpdate() {
   } catch (e) {
     say(red(`Couldn't check models: ${e.message}`));
   }
-  launch(s);
+  await launch(s);
   if (os.platform() === 'darwin' && !QUIET) say(dim('You can close this window.'));
 })().catch((e) => fail(e.message));

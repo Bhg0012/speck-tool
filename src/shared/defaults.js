@@ -6,9 +6,10 @@ const path = require('path');
 const DEFAULT_READER = 'qwen3-vl:8b-instruct';
 
 const DEFAULTS = {
-  configVersion: 2,
+  configVersion: 3,
   ollamaUrl: 'http://127.0.0.1:11434',
   readerModel: DEFAULT_READER, // vision model that reads the screen
+  modelAuto: true, // launcher picks the best model for this computer's graphics card
   solverModel: 'reader', // 'reader' (same model does everything) | any installed model name
   mode: 'careful', // 'fast' | 'careful' | 'max'
   keepAlive: '2h', // how long Ollama keeps the model loaded (first answer after that is slower)
@@ -29,6 +30,7 @@ const DEFAULTS = {
     position: 'center', // 'left' | 'center' | 'right'
     showConfidence: true,
     autoHideSeconds: 0, // 0 = keep the answer until the next one
+    trimWindows: true, // Windows/Linux: clip overlay windows to what they draw (removes the faint box)
   },
   showTray: true,
   shareAi: false, // let other computers on the home network use this computer's Ollama
@@ -55,6 +57,11 @@ function migrate(raw) {
     if (s.keepAlive === '30m') s.keepAlive = '2h';
     if (s.appearance) delete s.appearance.showStatus;
     s.configVersion = 2;
+  }
+  if (s.configVersion < 3) {
+    // v3: the launcher picks the model for the graphics card, unless one was chosen by hand.
+    s.modelAuto = !s.readerModel || s.readerModel === DEFAULT_READER;
+    s.configVersion = 3;
   }
   return s;
 }

@@ -14,7 +14,7 @@ const A = require('./answer');
 const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
-const NUM_CTX = 4096; // image (<=1600 tokens) + prompt + answer fit; smaller = less memory, faster
+const NUM_CTX = 3072; // image (<=1600 tokens) + prompt + answer fit; small = fits 4 GB graphics cards
 const MAX_TOKENS = 600; // bounded output for non-thinking models
 // Generous, so a slow (CPU-only) PC still gets its answer; the speed test explains how to speed it up.
 const CALL_TIMEOUT_MS = 240000;

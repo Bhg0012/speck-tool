@@ -19,11 +19,12 @@ function callLine(c) {
   return `    ${c.step}: load ${c.loadS}s · read ${c.promptTokens} tok in ${c.promptS}s · write ${c.genTokens} tok in ${c.genS}s (${tps}/s)`;
 }
 
-function buildDiagnostics({ app, system, gpu, ollama, settings, asks }) {
+function buildDiagnostics({ app, system, gpu, nvidia, errors = [], ollama, settings, asks }) {
   const out = [];
   out.push(`Speck ${app.version} (${app.commit || '?'}) · ${system.platform} ${system.release} ${system.arch}`);
   out.push(`CPU: ${system.cpu} × ${system.cores} · RAM ${system.ramGb} GB (${system.freeGb} GB free)`);
   out.push('GPU:', ...gpuLines(gpu));
+  if (nvidia) out.push(`Best-fit check: ${nvidia.name}${nvidia.vramGb ? `, ${nvidia.vramGb} GB` : ''}`);
   if (ollama.ok) {
     out.push(`Ollama ${ollama.version} at ${settings.ollamaUrl}`);
     out.push(`  installed: ${ollama.models.map((m) => `${m.name} (${(m.size / 1e9).toFixed(1)} GB)`).join(', ') || 'none'}`);
@@ -43,6 +44,7 @@ function buildDiagnostics({ app, system, gpu, ollama, settings, asks }) {
     out.push(a.error ? `${head} · ERROR: ${a.error}` : `${head} · answer "${a.answer}" ${a.confidence}/10`);
     for (const c of a.calls || []) out.push(callLine(c));
   }
+  if (errors.length) out.push('Recent errors:', ...errors.map((e) => `  ${e}`));
   return out.join('\n');
 }
 

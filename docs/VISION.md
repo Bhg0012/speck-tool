@@ -167,3 +167,11 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   running the model. A PC without a supported graphics card runs it on the CPU (measured 45 s to
   3 min). Added: Speed test (Settings) with one-click fixes, Copy diagnostics, and sharing the Mac's
   AI with the PC over the home network (with automatic fallback to the PC's own Ollama).
+- **2026-10-19** - After v1.4.0 nothing was visible when starting Speck. Removed the Windows "no
+  backdrop" window option (the likely cause). Trimming can never block start-up now: it's guarded,
+  with a backup "show" and a Settings toggle. Errors go to speck.log, and the launcher reports it if
+  Speck dies right after starting. Nothing may ever fail silently.
+- **2026-10-19** - Bruce's Windows PC: Surface Laptop Studio, i7-11370H, 16 GB RAM, **NVIDIA GeForce
+  RTX 3050 Ti Laptop GPU (4 GB)** + Intel Iris Xe. The 8B model (~7 GB) didn't fit the 4 GB card and
+  ran mostly on the CPU. The launcher now picks the model for the graphics card automatically
+  (4 GB NVIDIA -> qwen3-vl:4b-instruct; Apple silicon -> 8b), and the context is trimmed to fit 4 GB.
