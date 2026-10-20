@@ -147,3 +147,10 @@ test('an exact result that matches no option caps confidence at 5', () => {
   assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'nomatch' }), 5);
   assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'fail' }), 4);
 });
+
+test('a "full" answer that only lists the calculation steps is recognised', () => {
+  const steps = [{ name: 'gross_profit' }, { name: 'net_income' }];
+  assert.ok(A.stepsEcho('gross_profit: 33,512\nNet income: 10,500.68', steps));
+  assert.ok(!A.stepsEcho('a) Perimeter: 26 cm\nb) Area: 40 cm²', [{ name: 'perimeter' }, { name: 'area' }]));
+  assert.ok(!A.stepsEcho('gross_profit: 33,512', steps), 'one line is not a list');
+});

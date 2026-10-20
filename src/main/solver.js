@@ -178,10 +178,11 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   }
 
   // Tables and long answers are shown on hover, laid out like the task (never for multiple choice).
-  // Models sometimes fill "full" with a one-liner like "x = 5": that still shows directly.
+  // Models sometimes fill "full" with a one-liner like "x = 5", or with just their calculation
+  // steps ("gross_profit: 33,512" ...) when one number was asked for: those still show directly.
   const long = (s) => !!s && (/\n/.test(s) || s.length > 90);
   const table = best.choice ? [] : best.table || [];
-  const full = best.choice || table.length ? '' : [best.full, best.answer].find(long) || '';
+  const full = best.choice || table.length ? '' : [A.stepsEcho(best.full, best.calc) ? '' : best.full, best.answer].find(long) || '';
 
   return {
     answer,

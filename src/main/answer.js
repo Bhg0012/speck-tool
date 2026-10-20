@@ -331,6 +331,19 @@ function checkChoice(c, question) {
   return { ...c, choice: label, answer: `${label}) ${options[label]}`, corrected: `picked ${label}: it matches the exact calculation` };
 }
 
+// True when a multi-line answer only lists the calculation steps ("gross_profit: 33,512"), i.e.
+// the model showed its working although a single result was asked for.
+function stepsEcho(full, steps) {
+  const lines = str(full).split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2 || !steps || !steps.length) return false;
+  const key = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const names = new Set(steps.map((s) => s.name));
+  return lines.every((l) => {
+    const m = /^([^:=]+)[:=]/.exec(l);
+    return m && names.has(key(m[1]));
+  });
+}
+
 // What gets copied: a table as tab-separated rows (pastes into a spreadsheet as a table),
 // a multi-line answer as is, otherwise the short answer.
 function answerText(r) {
@@ -344,6 +357,7 @@ module.exports = {
   optionsFrom,
   optionsMatching,
   checkChoice,
+  stepsEcho,
   numbersClose,
   normalizeTable,
   normalizeFull,

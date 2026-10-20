@@ -183,6 +183,25 @@ test('the model never does the arithmetic: Speck computes its steps exactly', as
   }
 });
 
+test('one asked-for number still shows directly even if the model lists its steps', async () => {
+  const reply = () =>
+    ans('{net:2}', {
+      full: 'gross: {gross}\nnet: {net:2}',
+      calc: [
+        { name: 'gross', expr: '84750 - 51238' },
+        { name: 'net', expr: '(gross - 18945 - 1275) * (1 - 0.21)' },
+      ],
+    });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.answer, '10,500.68');
+    assert.equal(r.full, '');
+  } finally {
+    srv.close();
+  }
+});
+
 test('multiple choice: a wrong letter is corrected by the exact calculation', async () => {
   const q = 'Total cost of 12 items at $14.75? A) $165.00 B) $177.00 C) $187.50 D) $170.25';
   const reply = () => ans('A) $165.00', { question: q, choice: 'A', calc: [{ name: 'total', expr: '12 * 14.75' }] });
