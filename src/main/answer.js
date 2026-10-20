@@ -208,6 +208,10 @@ function answersEquivalent(a, b) {
     if (normalizeText(fa) === normalizeText(fb)) return true;
     // written answers rarely match word for word: their short summaries are compared below
   }
+  // Answers with several numbers ("26 cm, 40 cm²" vs "a) 26 cm, b) 40 cm²"): same numbers, same order.
+  const ya = allNumbers(a.answer);
+  const yb = allNumbers(b.answer);
+  if (ya.length >= 2 && yb.length >= 2) return ya.length === yb.length && ya.every((x, i) => numbersClose(x, yb[i]));
   const na = extractNumber(a.answer);
   const nb = extractNumber(b.answer);
   if (na && nb) return numbersClose(na, nb);

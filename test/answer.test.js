@@ -174,3 +174,8 @@ test('ties go to the attempt that left out fewer of the question\'s numbers', ()
   ]);
   assert.equal(g[0].members[0].answer, '10,500.68');
 });
+
+test('answers with several numbers agree when the numbers match, whatever the labels', () => {
+  assert.ok(A.answersEquivalent({ answer: '26 cm, 40 cm²', full: 'a) 26 cm\nb) 40 cm²' }, { answer: 'a) 26 cm, b) 40 cm²', full: '' }));
+  assert.ok(!A.answersEquivalent({ answer: '26 cm, 40 cm²' }, { answer: '26 cm, 42 cm²' }));
+});
