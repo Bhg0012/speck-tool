@@ -205,6 +205,8 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     agreement: `${winners.length}/${total}`,
     math,
     calc: best.calc || [],
+    // every attempt, for diagnostics: what it answered and how its numbers checked out
+    attempts: candidates.map((c) => ({ source: c.source, answer: c.answer, math: c.math, unused: c.unused })),
     mode,
     models,
     calls,
