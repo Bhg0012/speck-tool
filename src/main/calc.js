@@ -452,7 +452,7 @@ function applySteps(c) {
       math = 'unverified';
     }
     const cells = [...(c.table || []).slice(1).flat(), c.full];
-    if (math === 'pass' && cells.some((t) => typed(t).some((l) => !accountedFor(l, known)))) math = 'unverified';
+    if (math === 'pass' && unexplained(cells.flatMap(typed), known).length) math = 'unverified';
   }
   return {
     ...c,
@@ -466,4 +466,37 @@ function applySteps(c) {
   };
 }
 
-module.exports = { evaluateExact, format, normalizeSteps, runSteps, applySteps, literals, toFloat, isExact, roundTo, parseNumber };
+// Typed table cells / answer lines the model didn't calculate (e.g. a running total column):
+// each must follow from already-trusted numbers by one + - * / (16,800 = 8,400 + 8,400; then
+// 25,200 = 16,800 + 8,400 ...). Trusted: computed steps, the question's numbers, and cells
+// already verified this way. Returns the typed numbers that can't be explained.
+function unexplained(lits, known) {
+  const pool = [...new Set(known)];
+  let pending = lits.filter((l) => !accountedFor(l, pool));
+  const matches = (lit, v) => {
+    const k = 10 ** Math.min(lit.places, 10);
+    return Number.isFinite(v) && Math.abs(Math.round(v * k) / k - lit.value) < 1e-9 * Math.max(1, Math.abs(lit.value));
+  };
+  const derivable = (lit) => {
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i; j < pool.length; j++) {
+        const [a, b] = [pool[i], pool[j]];
+        if ([a + b, a - b, b - a, a * b, b ? a / b : NaN, a ? b / a : NaN].some((v) => matches(lit, v))) return true;
+      }
+    }
+    return false;
+  };
+  for (let changed = true; changed && pending.length; ) {
+    changed = false;
+    for (const lit of pending.slice()) {
+      if (derivable(lit)) {
+        pool.push(lit.value);
+        pending = pending.filter((p) => p !== lit);
+        changed = true;
+      }
+    }
+  }
+  return pending;
+}
+
+module.exports = { evaluateExact, format, normalizeSteps, runSteps, applySteps, literals, unexplained, toFloat, isExact, roundTo, parseNumber };

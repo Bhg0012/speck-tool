@@ -153,3 +153,20 @@ test('multiple choice answers keep the option as printed (the option check cover
   assert.equal(r.answer, 'A) $18.71');
   assert.equal(r.math, 'pass');
 });
+
+test('typed table cells are verified when they follow from trusted numbers by one step', () => {
+  const steps = [
+    { name: 'dep', expr: '(48000 - 6000) / 5' },
+    { name: 'b1', expr: '48000 - dep' },
+    { name: 'b2', expr: 'b1 - dep' },
+  ];
+  const q = 'Cost $48,000, salvage $6,000, life 5 years.';
+  const table = (acc3) => [
+    ['Year', 'Dep', 'Accumulated', 'Book'],
+    ['1', '8400', '8400', '{b1}'],
+    ['2', '8400', '16800', '{b2}'],
+    ['3', '8400', acc3, '22800'],
+  ];
+  assert.equal(C.applySteps({ question: q, answer: 'done', full: '', calc: steps, table: table('25200') }).math, 'pass');
+  assert.equal(C.applySteps({ question: q, answer: 'done', full: '', calc: steps, table: table('25300') }).math, 'unverified');
+});
