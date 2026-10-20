@@ -52,6 +52,19 @@ async function render() {
     const a = el('div', 'a', it.answer);
     if (it.confidence) a.append(el('span', 'conf', `${it.confidence}/10`));
     item.append(a);
+    // A filled-in table is shown as a table; a long answer line by line, like the task.
+    if (it.table && it.table.length) {
+      const t = el('table', 'tbl');
+      it.table.forEach((row, i) => {
+        const tr = t.insertRow();
+        for (const cell of row) tr.append(el(i === 0 ? 'th' : 'td', '', cell));
+      });
+      const wrap = el('div', 'full');
+      wrap.append(t);
+      item.append(wrap);
+    } else if (it.full) {
+      item.append(el('div', 'full', it.full));
+    }
     list.append(item);
   }
 }

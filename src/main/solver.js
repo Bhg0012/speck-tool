@@ -15,7 +15,7 @@ const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
 const NUM_CTX = 3072; // image (<=1600 tokens) + prompt + answer fit; small = fits 4 GB graphics cards
-const MAX_TOKENS = 600; // bounded output for non-thinking models
+const MAX_TOKENS = 800; // bounded output for non-thinking models (room for a filled-in table)
 // Generous, so a slow (CPU-only) PC still gets its answer; the speed test explains how to speed it up.
 const CALL_TIMEOUT_MS = 240000;
 const THINKING_TIMEOUT_MS = 360000;
@@ -171,8 +171,16 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     answer = `${best.choice}) ${answer}`;
   }
 
+  // Tables and long answers are shown on hover, laid out like the task (never for multiple choice).
+  // Models sometimes fill "full" with a one-liner like "x = 5": that still shows directly.
+  const long = (s) => !!s && (/\n/.test(s) || s.length > 90);
+  const table = best.choice ? [] : best.table || [];
+  const full = best.choice || table.length ? '' : [best.full, best.answer].find(long) || '';
+
   return {
     answer,
+    table,
+    full,
     choice: best.choice || '',
     note: best.note || winners.map((c) => c.note).find(Boolean) || '',
     question: best.question || candidates.map((c) => c.question).find(Boolean) || '',

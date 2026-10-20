@@ -12,7 +12,9 @@ Accuracy is the top priority:
 Reply with ONLY a JSON object with these keys, in this order:
 - "question": the question and its answer options, copied exactly but briefly (max 40 words)
 - "work": your working in at most 4 short steps (only what is needed to be sure)
-- "answer": the final answer only, as short as possible: a number with units, a word, a short phrase, the option such as "B) 42", or one short sentence. For code, only the corrected line(s).
+- "table": [] unless the task is a table, chart or grid to fill in. Then the WHOLE table exactly as laid out in the screenshot: an array of rows, each an array of cell texts, header row first, same rows, columns and order, given cells copied and empty cells filled in
+- "full": "" for multiple choice, a table, or an answer that fits on one short line. Otherwise (several parts or blanks, a list, steps asked for, a written response) the complete answer as plain text laid out like the task: one line per part or blank, labelled as in the task (e.g. "a) 12 cm"); no markdown; at most 20 lines
+- "answer": the final answer only, as short as possible: a number with units, a word, a short phrase, the option such as "B) 42", or one short sentence. For code, only the corrected line(s). With a table or full answer: a summary of at most 8 words
 - "choice": the option label(s) you picked, e.g. "B" or "A,C"; "" if not multiple choice
 - "check": if the answer is a single number, one plain arithmetic expression (digits, + - * / ^, parentheses, sqrt) that evaluates to it; otherwise ""
 - "confidence": integer 1-10 (10 = certain and verified, 7 = very likely, 4 = unsure, 1 = guess)
@@ -41,13 +43,15 @@ const SOLVE_SCHEMA = {
   properties: {
     question: { type: 'string' },
     work: { type: 'string' },
+    table: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+    full: { type: 'string' },
     answer: { type: 'string' },
     choice: { type: 'string' },
     check: { type: 'string' },
     confidence: { type: 'integer' },
     note: { type: 'string' },
   },
-  required: ['question', 'work', 'answer', 'choice', 'check', 'confidence', 'note'],
+  required: ['question', 'work', 'table', 'full', 'answer', 'choice', 'check', 'confidence', 'note'],
 };
 
 module.exports = { SOLVER, FIRST, SECOND, tiebreak, READER, SOLVE_SCHEMA };

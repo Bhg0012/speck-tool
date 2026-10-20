@@ -111,6 +111,27 @@ main::-webkit-scrollbar-thumb {
   word-break: break-word;
   user-select: text;
 }
+.full {
+  margin-top: 5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  overflow-x: auto;
+}
+.tbl {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tbl th,
+.tbl td {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  text-align: center;
+}
+.tbl th {
+  font-weight: 600;
+}
 .a .conf {
   font-weight: 400;
   color: var(--muted);

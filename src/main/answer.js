@@ -63,14 +63,40 @@ function normalizeChoice(c) {
     .join(',');
 }
 
+// A filled-in table as rows of cell texts, padded to the same width; [] if it isn't one.
+function normalizeTable(t) {
+  if (!Array.isArray(t)) return [];
+  const rows = t
+    .filter(Array.isArray)
+    .slice(0, 40)
+    .map((r) => r.slice(0, 12).map((c) => str(c).slice(0, 120)));
+  const cols = Math.max(0, ...rows.map((r) => r.length));
+  if (rows.length < 2 || !rows.some((r) => r.some(Boolean))) return [];
+  return rows.map((r) => [...r, ...Array(cols - r.length).fill('')]);
+}
+
+// Multi-line answers keep their line breaks; spaces inside a line are tidied.
+function normalizeFull(v) {
+  return str(v)
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 3000);
+}
+
 // Turns a parsed JSON object (or raw text if parsing failed) into a clean result.
 function normalizeResult(obj, rawText = '') {
   if (!obj) {
     const firstLine = str(rawText).split('\n').map((l) => l.trim()).find(Boolean) || '';
-    return { answer: firstLine.slice(0, 300), choice: '', check: '', confidence: 3, note: '', parsed: false };
+    return { answer: firstLine.slice(0, 300), choice: '', check: '', confidence: 3, note: '', table: [], full: '', parsed: false };
   }
   return {
     answer: str(obj.answer),
+    table: normalizeTable(obj.table),
+    full: normalizeFull(obj.full),
     choice: normalizeChoice(obj.choice),
     check: str(obj.check),
     confidence: clampConf(obj.confidence),
@@ -96,18 +122,28 @@ function normalizeText(s) {
 
 // Extracts the single number an answer stands for ("x = 4", "$1,200", "45%", "3/4").
 // Returns { value, decimals, percent } or null when the answer isn't a single plain number.
-function extractNumber(s) {
-  const t = str(s)
-    .replace(LABEL_RE, '')
+function cleanNumbers(s) {
+  return str(s)
     .replace(/(\d),(?=\d{3}\b)/g, '$1')
     .replace(/[−–]/g, '-');
+}
+
+function extractNumber(s) {
+  const t = cleanNumbers(str(s).replace(LABEL_RE, ''));
   const matches = [...t.matchAll(NUMBER_RE)];
   if (matches.length !== 1) return null;
   const m = matches[0];
   const before = t[m.index - 1] || '';
   const after = t[m.index + m[0].length] || '';
   if (/[a-z^_]/i.test(before) || /[a-z(]/i.test(after)) return null; // 2x, x^2, 3(...)
-  const tok = m[0].replace(/\s+/g, '');
+  const n = parseNumberToken(m[0]);
+  if (!n) return null;
+  const percent = /^\s*%/.test(t.slice(m.index + m[0].length));
+  return { ...n, percent };
+}
+
+function parseNumberToken(token) {
+  const tok = token.replace(/\s+/g, '');
   let value;
   let decimals;
   if (tok.includes('/')) {
@@ -121,8 +157,18 @@ function extractNumber(s) {
     decimals = dot ? dot.length : 0;
   }
   if (!Number.isFinite(value)) return null;
-  const percent = /^\s*%/.test(t.slice(m.index + m[0].length));
-  return { value, decimals, percent };
+  return { value, decimals };
+}
+
+// Every number in a long answer, in order (tables are read row by row).
+function allNumbers(s) {
+  return [...cleanNumbers(s).matchAll(NUMBER_RE)].map((m) => parseNumberToken(m[0])).filter(Boolean);
+}
+
+// The long form of an answer, if it has one: a filled-in table or a multi-line answer.
+function longForm(r) {
+  if (r.table && r.table.length) return r.table.map((row) => row.join(' | ')).join('\n');
+  return str(r.full);
 }
 
 function round(x, d) {
@@ -150,6 +196,16 @@ function answersEquivalent(a, b) {
   const la = labelOf(a);
   const lb = labelOf(b);
   if (la && lb) return la === lb;
+  // Tables and multi-part answers: the same numbers in the same order, or the same text.
+  const fa = longForm(a);
+  const fb = longForm(b);
+  if (fa && fb) {
+    const xa = allNumbers(fa);
+    const xb = allNumbers(fb);
+    if (xa.length && xb.length) return xa.length === xb.length && xa.every((x, i) => numbersClose(x, xb[i]));
+    if (normalizeText(fa) === normalizeText(fb)) return true;
+    // written answers rarely match word for word: their short summaries are compared below
+  }
   const na = extractNumber(a.answer);
   const nb = extractNumber(b.answer);
   if (na && nb) return numbersClose(na, nb);
@@ -222,8 +278,20 @@ function parseReader(text) {
   };
 }
 
+// What gets copied: a table as tab-separated rows (pastes into a spreadsheet as a table),
+// a multi-line answer as is, otherwise the short answer.
+function answerText(r) {
+  if (!r) return '';
+  if (r.table && r.table.length) return r.table.map((row) => row.join('\t')).join('\n');
+  return str(r.full) || str(r.answer);
+}
+
 module.exports = {
   parseJsonLoose,
+  normalizeTable,
+  normalizeFull,
+  answerText,
+  allNumbers,
   normalizeResult,
   normalizeText,
   extractNumber,

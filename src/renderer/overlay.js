@@ -67,7 +67,29 @@ if (role === 'bar') {
   const text = $('.text');
   const conf = $('.conf');
   const detail = $('.detail');
+  const full = $('.full');
   let current = null;
+  const PROMPT = 'Hover to see the full answer';
+  const isLong = (p) => p && p.kind === 'answer' && ((p.table && p.table.length) || p.full);
+
+  // A filled-in table is drawn as a table, laid out like the one in the capture area.
+  const fillFull = (p) => {
+    full.textContent = '';
+    if (p.table && p.table.length) {
+      const t = document.createElement('table');
+      p.table.forEach((row, i) => {
+        const tr = t.insertRow();
+        for (const cell of row) {
+          const c = document.createElement(i === 0 ? 'th' : 'td');
+          c.textContent = cell;
+          tr.append(c);
+        }
+      });
+      full.append(t);
+    } else {
+      full.textContent = p.full;
+    }
+  };
 
   // Tell the main process how big the answer is, so the window is clipped to just that
   // (Windows otherwise paints a faint box over the whole see-through bar).
@@ -82,11 +104,13 @@ if (role === 'bar') {
   pill.addEventListener('mouseenter', () => {
     speck.send('bar:hover', true);
     if (current && current.kind === 'answer') pill.classList.add('expanded');
+    if (isLong(current)) text.textContent = current.answer; // its short summary, above the full answer
     reportShape();
   });
   pill.addEventListener('mouseleave', () => {
     speck.send('bar:hover', false);
     pill.classList.remove('expanded');
+    if (isLong(current)) text.textContent = PROMPT;
     reportShape();
   });
   pill.addEventListener('click', () => {
@@ -116,17 +140,22 @@ if (role === 'bar') {
       return;
     }
     current = p;
-    pill.classList.remove('error', 'answer', 'note');
+    pill.classList.remove('error', 'answer', 'note', 'long');
     pill.classList.add(p.kind, 'show');
     detail.textContent = '';
     conf.textContent = '';
+    full.textContent = '';
 
     if (p.kind === 'error') {
       text.textContent = `! ${p.text}`;
     } else if (p.kind === 'note') {
       text.textContent = p.text;
     } else if (p.kind === 'answer') {
-      text.textContent = p.answer;
+      // Tables and long answers stay tucked away until hovered: only a short prompt shows.
+      const long = isLong(p);
+      pill.classList.toggle('long', !!long);
+      if (long) fillFull(p);
+      text.textContent = long ? (pill.classList.contains('expanded') ? p.answer : PROMPT) : p.answer;
       if (showConfidence) conf.textContent = `${p.confidence}/10`;
       const bits = [];
       if (p.note) bits.push(p.note);

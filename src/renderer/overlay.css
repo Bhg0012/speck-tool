@@ -217,6 +217,35 @@ body[data-pos='right'] .bar { justify-content: flex-end; }
   opacity: 0.7;
 }
 
+/* Tables and long answers: hidden behind "Hover to see the full answer" until hovered. */
+.full {
+  display: none;
+  max-height: calc(100vh - 70px); /* scrolls inside the answer bar window if it's very long */
+  overflow: auto;
+  margin-top: 3px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pill.long.expanded .full {
+  display: block;
+}
+.full table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.full th,
+.full td {
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--fg) 28%, transparent);
+  text-align: center;
+}
+.full th {
+  font-weight: 600;
+}
+
 /* Themes */
 body.theme-light-on-dark { --fg: rgba(255, 255, 255, 0.95); --bg: rgba(0, 0, 0, 0.42); }
 body.theme-plain-dark { --fg: rgba(0, 0, 0, 0.92); --bg: transparent; --shadow: 0 0 2px rgba(255, 255, 255, 0.95), 0 0 4px rgba(255, 255, 255, 0.7); }

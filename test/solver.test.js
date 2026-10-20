@@ -115,6 +115,51 @@ test('multiple choice answers always show the letter', async () => {
   }
 });
 
+test('a table to fill in comes back as a table; multiple choice never does', async () => {
+  const table = [['x', 'y'], ['1', '3'], ['2', '5']];
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans('Table completed', { table, full: '' }) });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.deepEqual(r.table, table);
+    assert.equal(r.full, '');
+    assert.equal(r.agreement, '2/2');
+    assert.ok(srv.calls[0].format.required.includes('table'), 'the model is asked for the table');
+  } finally {
+    srv.close();
+  }
+  const mc = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans('B) 42', { choice: 'B', table, full: 'x' }) });
+  try {
+    const r = await run(mc.url, 'fast');
+    assert.equal(r.answer, 'B) 42');
+    assert.deepEqual(r.table, []);
+    assert.equal(r.full, '');
+  } finally {
+    mc.close();
+  }
+});
+
+test('a long answer without a full version is still shown on hover', async () => {
+  const long = 'First, the mitochondria produce ATP through cellular respiration, which powers most of the cell.';
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans(long) });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.full, long);
+  } finally {
+    srv.close();
+  }
+});
+
+test('a one-line "full" answer still shows directly', async () => {
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans('5', { full: 'x = 5' }) });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.answer, '5');
+    assert.equal(r.full, '');
+  } finally {
+    srv.close();
+  }
+});
+
 test('old thinking model setting still works and turns thinking off', async () => {
   const srv = await fakeOllama({ models: ['qwen3-vl:8b'], caps: CAPS, reply: () => ans('7') });
   try {
