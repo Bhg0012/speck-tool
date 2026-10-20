@@ -100,8 +100,8 @@ philosophy.
 | Mode | Steps |
 | --- | --- |
 | **Fast** | One attempt. Confidence capped at 8 (unverified). |
-| **Careful** *(default)* | Two independent attempts (the second uses a different method); tie-break on disagreement. |
-| **Max** (deep hotkey) | Three independent attempts; tie-break if there's no majority. |
+| **Careful** *(default)* | Two independent attempts (the second uses a different method); on disagreement, more attempts (up to 4) until two agree. |
+| **Max** (deep hotkey) | Three independent attempts; more (up to 6) until three agree. |
 
 Each attempt copies the question exactly and shows short working before the answer. Confidence
 (1-10) combines the model's own confidence, **agreement between independent attempts**, and the
@@ -115,7 +115,12 @@ is right to the cent; rounding half away from zero) and fills the numbers in. Th
 - the two independent attempts must agree on the computed numbers (every cell of a table);
 - for multiple choice, the option that matches the exact result is picked, correcting the
   model's letter if needed; a result that matches no option caps confidence at 5;
-- a step that can't be computed shows "?" (never a wrong number) and caps confidence at 4.
+- a step that can't be computed shows "?" (never a wrong number) and caps confidence at 4;
+- a number the model typed itself instead of using a step is checked: a lone answer number that
+  isn't any computed value is replaced by the exact result; elsewhere it caps confidence at 6;
+- cents are never dropped unless the question asks for rounding;
+- numbers given in the question that no step uses are flagged (the "forgot the interest expense"
+  slip): such attempts lose ties, and the next attempt is told what was left out.
 
 ## 5. Design language
 
