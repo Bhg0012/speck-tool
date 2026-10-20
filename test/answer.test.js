@@ -146,6 +146,7 @@ test('an exact result that matches no option caps confidence at 5', () => {
   assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'pass' }), 10);
   assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'nomatch' }), 5);
   assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'fail' }), 4);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'unverified' }), 6);
 });
 
 test('a "full" answer that only lists the calculation steps is recognised', () => {

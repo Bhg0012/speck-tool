@@ -265,6 +265,7 @@ function scoreConfidence({ groups, total, math = null, legibility = 'good' }) {
   }
   if (math === 'fail') c = Math.min(c, 4);
   if (math === 'nomatch') c = Math.min(c, 5); // the exact result matches none of the options
+  if (math === 'unverified') c = Math.min(c, 6); // some numbers were typed, not calculated
   if (legibility === 'partial') c = Math.min(c, 7);
   if (legibility === 'poor') c = Math.min(c, 4);
   return clampConf(Math.floor(c));

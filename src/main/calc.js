@@ -366,8 +366,16 @@ function runSteps(steps) {
 
 const PLACEHOLDER_RE = /\{\{?\s*([a-z_][a-z0-9_]*)\s*(?::\s*(\d{1,2}))?\s*\}?\}/gi;
 
+// Places a value needs to be shown exactly (up to 10).
+function placesNeeded(x) {
+  const text = format(x);
+  return text.includes('.') ? text.split('.')[1].length : 0;
+}
+
 // Replaces {name} / {name:2} with the computed value. Unknown names become "?".
-function fill(text, values, used, missing) {
+// Without a rounding instruction in the question, cents are never dropped ({x:0} on 10500.68
+// still shows 10,500.68): models like to round on their own.
+function fill(text, values, used, missing, mayRound) {
   return String(text || '').replace(PLACEHOLDER_RE, (_m, name, places) => {
     const key = name.toLowerCase();
     if (!own(values, key)) {
@@ -375,8 +383,28 @@ function fill(text, values, used, missing) {
       return '?';
     }
     used.push(key);
-    return format(values[key], places === undefined ? undefined : Number(places));
+    let p = places === undefined ? undefined : Number(places);
+    if (p !== undefined && p < 2 && !mayRound && placesNeeded(values[key]) > p) p = Math.min(2, placesNeeded(values[key]));
+    return format(values[key], p);
   });
+}
+
+// Numbers written out in a text: "$1,250.50", "-3", "0.25" -> [{ value, places, start, end }]
+function literals(text) {
+  return [...String(text || '').matchAll(/-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|-?\.\d+/g)].map((m) => ({
+    value: Number(m[0].replace(/,/g, '')),
+    places: m[0].includes('.') ? m[0].split('.')[1].length : 0,
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
+}
+
+// A typed number is accounted for if it's a computed value or a number from the question
+// (compared at the typed number's own precision), or a small label like "1" or "a) 2".
+function accountedFor(lit, known) {
+  if (Number.isInteger(lit.value) && Math.abs(lit.value) <= 20) return true;
+  const k = 10 ** Math.min(lit.places, 10);
+  return known.some((v) => Math.abs(Math.round(v * k) / k - lit.value) < 1e-9 * Math.max(1, Math.abs(v)));
 }
 
 /**
@@ -392,21 +420,43 @@ function applySteps(c) {
   PLACEHOLDER_RE.lastIndex = 0;
   if (!steps.length && !hasPlaceholders) return { ...c, math: null, finalValue: null };
   const { values, errors } = runSteps(steps);
+  const mayRound = /\bround|nearest|whole (dollar|number|percent|cent)|decimal place|significant/i.test(String(c.question || ''));
   const used = [];
   const missing = [];
-  const answer = fill(c.answer, values, used, missing);
+  let answer = fill(c.answer, values, used, missing, mayRound);
   const answerUsed = used.slice();
-  const full = fill(c.full, values, used, missing);
-  const table = (c.table || []).map((row) => row.map((cell) => fill(cell, values, used, missing)));
+  const full = fill(c.full, values, used, missing, mayRound);
+  const table = (c.table || []).map((row) => row.map((cell) => fill(cell, values, used, missing, mayRound)));
   const finalName = answerUsed[0] || (steps.length ? steps[steps.length - 1].name : null);
   const final = finalName && values[finalName] ? values[finalName] : null;
-  const math = errors.length || missing.length ? 'fail' : used.length || final ? 'pass' : null;
+  let math = errors.length || missing.length ? 'fail' : used.length || final ? 'pass' : null;
+
+  // Numbers the model typed itself instead of {name} are head math: check every one.
+  let corrected = '';
+  if (steps.length && math === 'pass') {
+    const known = [...Object.values(values).map(toFloat), ...literals(c.question).map((l) => l.value)];
+    const typed = (t) => literals(String(t || '').replace(PLACEHOLDER_RE, ''));
+    PLACEHOLDER_RE.lastIndex = 0;
+    const stray = typed(c.answer).filter((l) => !accountedFor(l, known));
+    if (!c.choice && !answerUsed.length && stray.length === 1 && literals(answer).length === 1 && final) {
+      // The one number in the answer isn't any computed value: show the exact final result instead.
+      const lit = literals(answer)[0];
+      const shown = format(final, lit.places > 0 ? Math.max(2, lit.places) : undefined);
+      answer = answer.slice(0, lit.start) + shown + answer.slice(lit.end);
+      corrected = 'number replaced by the exact calculation';
+    } else if (stray.length) {
+      math = 'unverified';
+    }
+    const cells = [...(c.table || []).slice(1).flat(), c.full];
+    if (math === 'pass' && cells.some((t) => typed(t).some((l) => !accountedFor(l, known)))) math = 'unverified';
+  }
   return {
     ...c,
     answer,
     full,
     table,
     math,
+    ...(corrected ? { corrected } : {}),
     finalValue: final ? toFloat(final) : null,
     calcErrors: [...errors, ...missing.map((m) => `${m}: not calculated`)],
   };

@@ -107,3 +107,42 @@ test('built-in object names are never callable or readable', () => {
   const r = C.applySteps({ answer: '{constructor} {__proto__}', full: '', table: [], calc: [{ name: 'a', expr: '1' }] });
   assert.equal(r.answer, '? ?');
 });
+
+const invoice = [
+  { name: 'line1', expr: '37 * 24.95' },
+  { name: 'line2', expr: '112 * 8.49' },
+  { name: 'line3', expr: '9 * 149.99' },
+  { name: 'subtotal', expr: 'line1 + line2 + line3' },
+  { name: 'tax', expr: 'subtotal * 0.0725' },
+  { name: 'total', expr: 'subtotal + tax' },
+];
+const Q = 'Invoice: 37 units @ $24.95, 112 units @ $8.49, 9 units @ $149.99. Sales tax 7.25%. Total due?';
+
+test('a head-math number typed into the answer is replaced by the exact result', () => {
+  const r = C.applySteps({ question: Q, answer: '$3456.37', full: '', table: [], calc: invoice });
+  assert.equal(r.answer, '$3,457.68');
+  assert.equal(r.math, 'pass');
+  assert.match(r.corrected, /exact calculation/);
+  // a typed number that IS one of the computed values is fine
+  assert.equal(C.applySteps({ question: Q, answer: '$3,223.94', full: '', table: [], calc: invoice.slice(0, 4) }).answer, '$3,223.94');
+});
+
+test('cents are never dropped unless the question asks for rounding', () => {
+  const steps = [{ name: 'net', expr: '(84750 - 51238 - 18945 - 1275) * (1 - 0.21)' }];
+  assert.equal(C.applySteps({ question: 'Compute net income.', answer: '${net:0}', full: '', table: [], calc: steps }).answer, '$10,500.68');
+  assert.equal(C.applySteps({ question: 'Round to the nearest dollar.', answer: '${net:0}', full: '', table: [], calc: steps }).answer, '$10,501');
+  assert.equal(C.applySteps({ question: 'Compute net income.', answer: '${net:2}', full: '', table: [], calc: steps }).answer, '$10,500.68');
+  assert.equal(C.applySteps({ question: 'How many?', answer: '{n:0}', full: '', table: [], calc: [{ name: 'n', expr: '24 / 2' }] }).answer, '12');
+});
+
+test('typed numbers in a table or long answer that match no calculation lower confidence', () => {
+  const steps = [
+    { name: 'dep', expr: '(48000 - 6000) / 5' },
+    { name: 'acc2', expr: 'dep * 2' },
+  ];
+  const q = 'Cost $48,000, salvage $6,000, life 5 years.';
+  const ok = C.applySteps({ question: q, answer: 'done', full: '', calc: steps, table: [['Year', 'Dep', 'Acc'], ['1', '8400', '{dep}'], ['2', '{dep}', '16,800']] });
+  assert.equal(ok.math, 'pass', 'typed 8400 / 16,800 equal computed values; 1 and 2 are labels');
+  const bad = C.applySteps({ question: q, answer: 'done', full: '', calc: steps, table: [['Year', 'Dep', 'Acc'], ['1', '{dep}', '8400'], ['2', '{dep}', '16,900']] });
+  assert.equal(bad.math, 'unverified');
+});

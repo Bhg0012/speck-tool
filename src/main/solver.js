@@ -16,7 +16,7 @@ const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
 const NUM_CTX = 3072; // image (<=1600 tokens) + prompt + answer fit; small = fits 4 GB graphics cards
-const MAX_TOKENS = 800; // bounded output for non-thinking models (room for a filled-in table)
+const MAX_TOKENS = 1000; // bounded output for non-thinking models (room for a table and its calculation steps)
 // Generous, so a slow (CPU-only) PC still gets its answer; the speed test explains how to speed it up.
 const CALL_TIMEOUT_MS = 240000;
 const THINKING_TIMEOUT_MS = 360000;
@@ -168,7 +168,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   // Exact-calculation status of the winning answer: any broken step or option mismatch counts.
   const statuses = winners.map((c) => c.math).filter(Boolean);
   const checked = winners.find((c) => c.check) || best;
-  const math = ['fail', 'nomatch', 'pass'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
+  const math = ['fail', 'nomatch', 'unverified', 'pass'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
   const confidence = A.scoreConfidence({ groups, total, math, legibility });
 
   // Multiple choice: always show the letter, e.g. "C) 75".
