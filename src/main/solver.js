@@ -176,10 +176,11 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
 
   const winners = groups[0].members;
   const best = winners[0];
-  // Exact-calculation status of the winning answer: any broken step or option mismatch counts.
+  // Exact-calculation status of the winning answer: any broken step or option mismatch counts;
+  // typed numbers only count as unverified if no agreeing attempt got there fully calculated.
   const statuses = winners.map((c) => c.math).filter(Boolean);
   const checked = winners.find((c) => c.check) || best;
-  const math = ['fail', 'nomatch', 'unverified', 'pass'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
+  const math = ['fail', 'nomatch', 'pass', 'unverified'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
   const confidence = A.scoreConfidence({ groups, total, math, legibility });
 
   // Multiple choice: always show the letter, e.g. "C) 75".

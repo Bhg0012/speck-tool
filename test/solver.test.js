@@ -275,6 +275,26 @@ test('attempts that agree on the answer agree, even if each listed its working d
   }
 });
 
+test('an agreed answer stays fully trusted if one attempt calculated it all', async () => {
+  const calc = [
+    { name: 'cm', expr: '38.50 - 23.25' },
+    { name: 'units', expr: 'ceil(142500 / cm)' },
+  ];
+  const fulls = ['', 'Contribution: 15.25\nBreak-even: 9,344.3 rounded up\nProfit at target: 777,777.77'];
+  let n = 0;
+  const reply = () => ans('{units}', { question: 'Fixed costs $142,500; price $38.50; variable cost $23.25. Round up.', calc, full: fulls[n++ % 2] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, '9,345');
+    assert.deepEqual(r.attempts.map((a) => a.math), ['pass', 'unverified']);
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+  } finally {
+    srv.close();
+  }
+});
+
 test('multiple choice: a wrong letter is corrected by the exact calculation', async () => {
   const q = 'Total cost of 12 items at $14.75? A) $165.00 B) $177.00 C) $187.50 D) $170.25';
   const reply = () => ans('A) $165.00', { question: q, choice: 'A', calc: [{ name: 'total', expr: '12 * 14.75' }] });
