@@ -43,6 +43,10 @@ function buildDiagnostics({ app, system, gpu, nvidia, errors = [], ollama, setti
     const head = `  ${a.at} · ${a.mode} · total ${(a.totalMs / 1000).toFixed(1)}s (capture ${a.captureMs} ms)`;
     out.push(a.error ? `${head} · ERROR: ${a.error}` : `${head} · answer "${a.answer}" ${a.confidence}/10`);
     for (const c of a.calls || []) out.push(callLine(c));
+    for (const t of a.attempts || []) {
+      const unused = t.unused && t.unused.length ? ` · never used ${t.unused.join(', ')}` : '';
+      out.push(`    attempt ${t.source}: "${t.answer}" · numbers ${t.math || 'n/a'}${unused}`);
+    }
   }
   if (errors.length) out.push('Recent errors:', ...errors.map((e) => `  ${e}`));
   return out.join('\n');

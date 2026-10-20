@@ -2,6 +2,7 @@
 // Pure helpers for parsing model output, comparing answers and scoring confidence.
 // No Electron or network code here, so it is unit-tested directly (test/answer.test.js).
 const { evaluate } = require('./mathcheck');
+const { normalizeSteps, literals } = require('./calc');
 
 // "B) ...", "(b) ...", "C. ...", "2) ..." - an option label at the start of an answer.
 const LABEL_RE = /^\s*\(?([A-Ha-h]|[1-9])[).:]\s+/;
@@ -102,6 +103,7 @@ function normalizeResult(obj, rawText = '') {
     confidence: clampConf(obj.confidence),
     note: str(obj.note).slice(0, 140),
     question: str(obj.question).slice(0, 2000),
+    calc: normalizeSteps(obj.calc),
     parsed: true,
   };
 }
@@ -206,6 +208,10 @@ function answersEquivalent(a, b) {
     if (normalizeText(fa) === normalizeText(fb)) return true;
     // written answers rarely match word for word: their short summaries are compared below
   }
+  // Answers with several numbers ("26 cm, 40 cm²" vs "a) 26 cm, b) 40 cm²"): same numbers, same order.
+  const ya = allNumbers(a.answer);
+  const yb = allNumbers(b.answer);
+  if (ya.length >= 2 && yb.length >= 2) return ya.length === yb.length && ya.every((x, i) => numbersClose(x, yb[i]));
   const na = extractNumber(a.answer);
   const nb = extractNumber(b.answer);
   if (na && nb) return numbersClose(na, nb);
@@ -217,7 +223,8 @@ function answersEquivalent(a, b) {
   return bare(ta) !== '' && bare(ta) === bare(tb);
 }
 
-// Groups candidate answers that mean the same thing; biggest (then most confident) group first.
+// Groups candidate answers that mean the same thing. Order: biggest group first, then the one
+// whose calculations left out fewer of the question's numbers, then the most confident.
 function tally(candidates) {
   const groups = [];
   for (const c of candidates) {
@@ -227,7 +234,8 @@ function tally(candidates) {
     else groups.push({ members: [c] });
   }
   const sum = (g) => g.members.reduce((s, m) => s + (m.confidence || 0), 0);
-  groups.sort((x, y) => y.members.length - x.members.length || sum(y) - sum(x));
+  const left = (g) => Math.min(...g.members.map((m) => (m.unused || []).length));
+  groups.sort((x, y) => y.members.length - x.members.length || left(x) - left(y) || sum(y) - sum(x));
   return groups;
 }
 
@@ -258,10 +266,14 @@ function scoreConfidence({ groups, total, math = null, legibility = 'good' }) {
     c = Math.min(10, mean + 1);
   } else if (agree / total >= 2 / 3) {
     c = Math.min(mean, 6);
+  } else if (agree >= 2 && (!groups[1] || agree > groups[1].members.length)) {
+    c = Math.min(mean, 5); // a clear plurality after extra attempts
   } else {
     c = Math.min(mean, 3);
   }
   if (math === 'fail') c = Math.min(c, 4);
+  if (math === 'nomatch') c = Math.min(c, 5); // the exact result matches none of the options
+  if (math === 'unverified') c = Math.min(c, 6); // some numbers were typed, not calculated
   if (legibility === 'partial') c = Math.min(c, 7);
   if (legibility === 'poor') c = Math.min(c, 4);
   return clampConf(Math.floor(c));
@@ -278,6 +290,96 @@ function parseReader(text) {
   };
 }
 
+// Answer options in a question's text: "A) 30 B) 36 C) 40" or "(a) ... (b) ...".
+// Returns { A: '30', B: '36', ... } for the longest A, B, C... run, or {} if there isn't one.
+function optionsFrom(text) {
+  const t = str(text);
+  const marks = [...t.matchAll(/(?:^|[\s([])\(?([A-Ha-h])[).:\]]\s+/g)].map((m) => ({
+    letter: m[1].toUpperCase(),
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
+  let best = [];
+  let run = [];
+  for (const m of marks) {
+    if (m.letter === 'A') run = [m];
+    else if (run.length && m.letter.charCodeAt(0) === run[run.length - 1].letter.charCodeAt(0) + 1) run.push(m);
+    else continue;
+    if (run.length > best.length) best = run.slice();
+  }
+  if (best.length < 2) return {};
+  const out = {};
+  best.forEach((m, i) => {
+    out[m.letter] = t.slice(m.end, i + 1 < best.length ? best[i + 1].start : undefined).trim();
+  });
+  return out;
+}
+
+// Which options show this computed value (allowing the option's own rounding, and percents).
+function optionsMatching(options, value) {
+  const exact = { value, decimals: Infinity };
+  return Object.keys(options).filter((label) => {
+    const text = options[label];
+    return allNumbers(text).some(
+      (n) => numbersClose(exact, n) || (text.includes('%') && numbersClose({ value: value * 100, decimals: Infinity }, n)),
+    );
+  });
+}
+
+// Multiple choice: the option is picked by the exactly computed result, not the model's guess.
+// - one option matches the result: that's the choice (corrected if the model picked another)
+// - none matches: the setup or the reading is probably wrong ('nomatch' lowers confidence)
+function checkChoice(c, question) {
+  if (!c.choice || c.choice.includes(',') || c.finalValue === null || c.finalValue === undefined) return c;
+  const options = optionsFrom(question);
+  if (Object.keys(options).length < 2) return c;
+  const hits = optionsMatching(options, c.finalValue);
+  if (!hits.length) return { ...c, math: 'nomatch' };
+  if (hits.length > 1 || hits[0] === c.choice) return c;
+  const label = hits[0];
+  return { ...c, choice: label, answer: `${label}) ${options[label]}`, corrected: `picked ${label}: it matches the exact calculation` };
+}
+
+// Numbers given in the question that no calculation step uses: the classic slip of leaving
+// something out (e.g. forgetting the interest expense). Answer options are not counted, and a
+// percent counts as used when the step uses it as a fraction (21% -> 0.21).
+function unusedGivens(question, steps) {
+  if (!steps || !steps.length) return [];
+  let q = str(question);
+  if (Object.keys(optionsFrom(q)).length) {
+    const at = q.search(/(?:^|[\s([])\(?[Aa][).:\]]\s+/); // where option A starts
+    if (at >= 0) q = q.slice(0, at);
+  }
+  const given = literals(q).map((l) => l.value).filter((v) => !(Number.isInteger(v) && Math.abs(v) <= 20));
+  const used = steps.flatMap((s) => literals(s.expr.replace(/[$€£¥]/g, '')).map((l) => l.value));
+  const near = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a));
+  return [...new Set(given)].filter((v) => !used.some((u) => near(u, v) || near(u * 100, v) || near(u, v * 100)));
+}
+
+// True when a multi-line answer only lists the calculation steps ("gross_profit: 33,512"), i.e.
+// the model showed its working although a single result was asked for.
+function stepsEcho(full, steps) {
+  const lines = str(full).split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2 || !steps || !steps.length) return false;
+  const key = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const names = new Set(steps.map((s) => s.name));
+  return lines.every((l) => {
+    const m = /^([^:=]+)[:=]/.exec(l);
+    return m && names.has(key(m[1]));
+  });
+}
+
+// Needs more than one short line.
+function isLong(s) {
+  return !!s && (/\n/.test(s) || s.length > 90);
+}
+
+// The multi-line answer worth keeping: none for multiple choice or a table, and not a one-liner
+// like "x = 5" or just the calculation steps listed again (models like to show their working).
+function keepFull(c) {
+  return c.choice || (c.table && c.table.length) || !isLong(c.full) || stepsEcho(c.full, c.calc) ? '' : c.full;
+}
+
 // What gets copied: a table as tab-separated rows (pastes into a spreadsheet as a table),
 // a multi-line answer as is, otherwise the short answer.
 function answerText(r) {
@@ -288,6 +390,14 @@ function answerText(r) {
 
 module.exports = {
   parseJsonLoose,
+  optionsFrom,
+  optionsMatching,
+  checkChoice,
+  stepsEcho,
+  unusedGivens,
+  isLong,
+  keepFull,
+  numbersClose,
   normalizeTable,
   normalizeFull,
   answerText,

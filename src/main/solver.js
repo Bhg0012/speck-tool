@@ -3,19 +3,23 @@
 // compared and a tie-breaker runs only when they disagree.
 //
 //   fast:    1 attempt
-//   careful: 2 independent attempts (+ tie-break if they disagree)        <- default
-//   max:     3 independent attempts (+ tie-break if there's no majority)
+//   careful: 2 independent attempts; more (up to 4) until two agree       <- default
+//   max:     3 independent attempts; more (up to 6) until three agree
+//
+// The model never does arithmetic: each attempt sets up named calculation steps that calc.js
+// computes exactly, so attempts can only disagree on how they read or set up the problem.
 //
 // Speed rules (measured against real Ollama, see docs/PERFORMANCE.md):
 // - one num_ctx for every call, so Ollama never reloads the model mid-question
 // - identical system prompt + screenshot first in every attempt, so the image is processed once
 // - instruct (non-thinking) vision model by default; working is short and visible in JSON
 const A = require('./answer');
+const { applySteps } = require('./calc');
 const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
 const NUM_CTX = 3072; // image (<=1600 tokens) + prompt + answer fit; small = fits 4 GB graphics cards
-const MAX_TOKENS = 800; // bounded output for non-thinking models (room for a filled-in table)
+const MAX_TOKENS = 1000; // bounded output for non-thinking models (room for a table and its calculation steps)
 // Generous, so a slow (CPU-only) PC still gets its answer; the speed test explains how to speed it up.
 const CALL_TIMEOUT_MS = 240000;
 const THINKING_TIMEOUT_MS = 360000;
@@ -132,7 +136,11 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     }
     calls.push({ step: source, model: m.solver, ...r.stats });
     const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
-    return { ...A.normalizeResult(obj, r.content), source };
+    // The model only sets up the calculations; Speck computes them exactly and fills in the numbers.
+    // Multiple choice is then checked against the computed result.
+    const n = A.normalizeResult(obj, r.content);
+    const c = applySteps({ ...n, full: A.keepFull(n) });
+    return { ...A.checkChoice(c, c.question), unused: A.unusedGivens(c.question, c.calc), source };
   }
 
   onStatus('solving');
@@ -143,14 +151,21 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     candidates.push(await attempt(P.SECOND, { temperature: 0.4, seed: 7, source: 'second' }));
     if (mode === 'max') candidates.push(await attempt(P.SECOND, { temperature: 0.7, seed: 21, source: 'third' }));
 
-    const groups = A.tally(candidates);
-    const counted = candidates.filter((c) => c.answer).length;
-    const majority = groups[0] && groups[0].members.length > counted / 2;
-    const unanimous = groups.length === 1 && groups[0].members.length === counted;
-    if (mode === 'max' ? !majority : !unanimous) {
+    // Keep solving independently until enough attempts agree on the (exactly computed) answer
+    // and that answer is ahead of every other one.
+    const need = mode === 'max' ? 3 : 2;
+    const most = mode === 'max' ? 6 : 4;
+    const settled = () => {
+      const g = A.tally(candidates);
+      return g[0] && g[0].members.length >= need && (!g[1] || g[0].members.length > g[1].members.length);
+    };
+    const seeds = [13, 29, 43, 57];
+    for (let i = 0; candidates.length < most && !settled(); i++) {
       onStatus('tie-break');
-      const seen = groups.map((g) => g.members[0].answer).slice(0, 3);
-      candidates.push(await attempt(P.tiebreak(seen), { temperature: 0.2, seed: 13, source: 'tiebreak' }));
+      const seen = A.tally(candidates)
+        .slice(0, 3)
+        .map((g) => ({ answer: g.members[0].answer, unused: g.members[0].unused }));
+      candidates.push(await attempt(P.tiebreak(seen), { temperature: 0.2 + 0.1 * i, seed: seeds[i], source: `tiebreak${i + 1}` }));
     }
   }
 
@@ -161,8 +176,11 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
 
   const winners = groups[0].members;
   const best = winners[0];
+  // Exact-calculation status of the winning answer: any broken step or option mismatch counts;
+  // typed numbers only count as unverified if no agreeing attempt got there fully calculated.
+  const statuses = winners.map((c) => c.math).filter(Boolean);
   const checked = winners.find((c) => c.check) || best;
-  const math = A.mathCheck(checked);
+  const math = ['fail', 'nomatch', 'pass', 'unverified'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
   const confidence = A.scoreConfidence({ groups, total, math, legibility });
 
   // Multiple choice: always show the letter, e.g. "C) 75".
@@ -172,21 +190,23 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   }
 
   // Tables and long answers are shown on hover, laid out like the task (never for multiple choice).
-  // Models sometimes fill "full" with a one-liner like "x = 5": that still shows directly.
-  const long = (s) => !!s && (/\n/.test(s) || s.length > 90);
+  // (one-liners and listed calculation steps were already dropped from "full" by keepFull)
   const table = best.choice ? [] : best.table || [];
-  const full = best.choice || table.length ? '' : [best.full, best.answer].find(long) || '';
+  const full = best.choice || table.length ? '' : best.full || (A.isLong(best.answer) ? best.answer : '');
 
   return {
     answer,
     table,
     full,
     choice: best.choice || '',
-    note: best.note || winners.map((c) => c.note).find(Boolean) || '',
+    note: winners.map((c) => c.corrected).find(Boolean) || best.note || winners.map((c) => c.note).find(Boolean) || '',
     question: best.question || candidates.map((c) => c.question).find(Boolean) || '',
     confidence,
     agreement: `${winners.length}/${total}`,
     math,
+    calc: best.calc || [],
+    // every attempt, for diagnostics: what it answered and how its numbers checked out
+    attempts: candidates.map((c) => ({ source: c.source, answer: c.answer, math: c.math, unused: c.unused })),
     mode,
     models,
     calls,

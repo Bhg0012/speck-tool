@@ -533,7 +533,7 @@ async function ask(deep) {
     });
     if (id !== jobId) return;
     const totalMs = Date.now() - t0;
-    logAsk({ mode: result.mode, totalMs, captureMs, answer: result.answer, confidence: result.confidence, calls: result.calls });
+    logAsk({ mode: result.mode, totalMs, captureMs, answer: result.answer, confidence: result.confidence, calls: result.calls, attempts: result.attempts });
     result.slow = totalMs > SLOW_MS;
     result.fallback = route.fallback;
     lastResult = result;

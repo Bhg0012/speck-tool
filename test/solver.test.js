@@ -94,6 +94,59 @@ test('disagreement triggers a tie-break and lowers confidence', async () => {
   }
 });
 
+test('careful keeps solving until two attempts agree, telling it which numbers were left out', async () => {
+  const q = 'Sales $84,750, COGS $51,238, operating expenses $18,945, interest $1,275, tax 21%. Net income?';
+  const forgot = [
+    { name: 'op', expr: '84750 - 51238 - 18945' },
+    { name: 'net', expr: 'op - op * 0.21' },
+  ];
+  const right = [
+    { name: 'ebt', expr: '84750 - 51238 - 18945 - 1275' },
+    { name: 'net', expr: 'ebt * (1 - 0.21)' },
+  ];
+  const wrongTax = [{ name: 'net', expr: '84750 - 51238 - 18945 - 1275' }];
+  const plan = [forgot, right, wrongTax, right]; // 1st, 2nd, 3rd, 4th call
+  let n = 0;
+  const reply = () => ans('${net:2}', { question: q, calc: plan[n++] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(srv.calls.length, 4, 'three different answers -> a fourth attempt');
+    assert.match(srv.calls[2].messages[1].content, /never used 1275/);
+    assert.equal(r.answer, '$10,500.68');
+    assert.equal(r.agreement, '2/4');
+    assert.ok(r.confidence <= 5 && r.confidence >= 4);
+  } finally {
+    srv.close();
+  }
+});
+
+test('careful stops after 4 attempts even without agreement, with low confidence', async () => {
+  let n = 0;
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans(String(100 + n++)) });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(srv.calls.length, 4);
+    assert.ok(r.confidence <= 3);
+  } finally {
+    srv.close();
+  }
+});
+
+test('max wants three agreeing attempts', async () => {
+  const answers = ['36', '35', '36', '36'];
+  let n = 0;
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans(answers[n++]) });
+  try {
+    const r = await run(srv.url, 'max');
+    assert.equal(srv.calls.length, 4);
+    assert.equal(r.agreement, '3/4');
+    assert.equal(r.answer, '36');
+  } finally {
+    srv.close();
+  }
+});
+
 test('max: three attempts, tie-break only without a majority', async () => {
   const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans('B) 42', { choice: 'B' }) });
   try {
@@ -155,6 +208,114 @@ test('a one-line "full" answer still shows directly', async () => {
     const r = await run(srv.url, 'fast');
     assert.equal(r.answer, '5');
     assert.equal(r.full, '');
+  } finally {
+    srv.close();
+  }
+});
+
+test('the model never does the arithmetic: Speck computes its steps exactly', async () => {
+  // Both attempts set up the right calculation; the "work" mental math is wrong and is ignored.
+  const reply = () =>
+    ans('Net income ${net:2}', {
+      work: 'revenue minus expenses = 31,000 (wrong mental math)',
+      calc: [
+        { name: 'revenue', expr: '1,250 * 48.60' },
+        { name: 'expenses', expr: '18,420.75 + 9,315.40 + 0.1 + 0.2' },
+        { name: 'net', expr: 'revenue - expenses' },
+      ],
+    });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, 'Net income $33,013.55');
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+    assert.ok(srv.calls[0].format.required.includes('calc'), 'the model is asked for calculation steps');
+  } finally {
+    srv.close();
+  }
+});
+
+test('one asked-for number still shows directly even if the model lists its steps', async () => {
+  const reply = () =>
+    ans('{net:2}', {
+      full: 'gross: {gross}\nnet: {net:2}',
+      calc: [
+        { name: 'gross', expr: '84750 - 51238' },
+        { name: 'net', expr: '(gross - 18945 - 1275) * (1 - 0.21)' },
+      ],
+    });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.answer, '10,500.68');
+    assert.equal(r.full, '');
+  } finally {
+    srv.close();
+  }
+});
+
+test('attempts that agree on the answer agree, even if each listed its working differently', async () => {
+  const calc = [
+    { name: 'subtotal', expr: '37 * 24.95 + 112 * 8.49 + 9 * 149.99' },
+    { name: 'total', expr: 'subtotal * 1.0725' },
+  ];
+  const workings = ['subtotal: 3223.94\ntotal: 3457.68', 'subtotal: 3,224\ntotal: 3,457.67'];
+  let n = 0;
+  const reply = () => ans('${total:2}', { calc, full: workings[n++ % 2] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, '$3,457.68');
+    assert.equal(r.agreement, '2/2');
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+  } finally {
+    srv.close();
+  }
+});
+
+test('an agreed answer stays fully trusted if one attempt calculated it all', async () => {
+  const calc = [
+    { name: 'cm', expr: '38.50 - 23.25' },
+    { name: 'units', expr: 'ceil(142500 / cm)' },
+  ];
+  const fulls = ['', 'Contribution: 15.25\nBreak-even: 9,344.3 rounded up\nProfit at target: 777,777.77'];
+  let n = 0;
+  const reply = () => ans('{units}', { question: 'Fixed costs $142,500; price $38.50; variable cost $23.25. Round up.', calc, full: fulls[n++ % 2] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, '9,345');
+    assert.deepEqual(r.attempts.map((a) => a.math), ['pass', 'unverified']);
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+  } finally {
+    srv.close();
+  }
+});
+
+test('multiple choice: a wrong letter is corrected by the exact calculation', async () => {
+  const q = 'Total cost of 12 items at $14.75? A) $165.00 B) $177.00 C) $187.50 D) $170.25';
+  const reply = () => ans('A) $165.00', { question: q, choice: 'A', calc: [{ name: 'total', expr: '12 * 14.75' }] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, 'B) $177.00');
+    assert.equal(r.choice, 'B');
+    assert.match(r.note, /exact calculation/);
+  } finally {
+    srv.close();
+  }
+});
+
+test('a calculation that breaks never shows a confident number', async () => {
+  const reply = () => ans('{total}', { calc: [{ name: 'total', expr: 'price * qty' }] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.answer, '?');
+    assert.ok(r.confidence <= 4);
   } finally {
     srv.close();
   }

@@ -118,3 +118,64 @@ test('copying gives a table as tab-separated rows, else the full or short answer
   assert.equal(A.answerText({ answer: 'a) 12', full: 'a) 12\nb) 30', table: [] }), 'a) 12\nb) 30');
   assert.equal(A.answerText({ answer: '42' }), '42');
 });
+
+test('answer options are read from the question text', () => {
+  assert.deepEqual(A.optionsFrom('What is 15% of 240? A) 30 B) 36 C) 40 D) 24'), { A: '30', B: '36', C: '40', D: '24' });
+  assert.deepEqual(A.optionsFrom('(a) $1,250.00 (b) $1,520.00 (c) None'), { A: '$1,250.00', B: '$1,520.00', C: 'None' });
+  assert.deepEqual(A.optionsFrom('No options here.'), {});
+});
+
+test('multiple choice is picked by the exact result', () => {
+  const q = 'Net income? A) $1,250.00 B) $1,520.00 C) $2,150.00 D) $1,502.00';
+  // the model picked A, but its own exact calculation gives 1,520 -> B
+  const fixed = A.checkChoice({ choice: 'A', answer: 'A) $1,250.00', finalValue: 1520, math: 'pass' }, q);
+  assert.equal(fixed.choice, 'B');
+  assert.equal(fixed.answer, 'B) $1,520.00');
+  // matches the model's pick: unchanged
+  assert.equal(A.checkChoice({ choice: 'B', answer: 'B) $1,520.00', finalValue: 1520, math: 'pass' }, q).answer, 'B) $1,520.00');
+  // matches nothing: flagged, which lowers confidence
+  assert.equal(A.checkChoice({ choice: 'B', answer: 'B', finalValue: 1600, math: 'pass' }, q).math, 'nomatch');
+  // percent options
+  assert.equal(A.checkChoice({ choice: 'A', answer: 'A', finalValue: 0.25 }, 'Rate? A) 20% B) 25% C) 30%').choice, 'B');
+  // options rounded to whole numbers still match
+  assert.equal(A.checkChoice({ choice: 'C', answer: 'C', finalValue: 36.8131 }, 'Margin? A) 35 B) 37 C) 40').choice, 'B');
+});
+
+test('an exact result that matches no option caps confidence at 5', () => {
+  const g = [{ members: [{ confidence: 9 }, { confidence: 9 }] }];
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'pass' }), 10);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'nomatch' }), 5);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'fail' }), 4);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'unverified' }), 6);
+});
+
+test('a "full" answer that only lists the calculation steps is recognised', () => {
+  const steps = [{ name: 'gross_profit' }, { name: 'net_income' }];
+  assert.ok(A.stepsEcho('gross_profit: 33,512\nNet income: 10,500.68', steps));
+  assert.ok(!A.stepsEcho('a) Perimeter: 26 cm\nb) Area: 40 cm²', [{ name: 'perimeter' }, { name: 'area' }]));
+  assert.ok(!A.stepsEcho('gross_profit: 33,512', steps), 'one line is not a list');
+});
+
+test('numbers from the question that no calculation uses are found (not options, not percents used as fractions)', () => {
+  const q = 'Sales $84,750; COGS $51,238; operating expenses $18,945; interest expense $1,275; tax rate 21%.';
+  const steps = [
+    { name: 'op', expr: '84750 - 51238 - 18945' },
+    { name: 'tax', expr: 'op * 0.21' },
+  ];
+  assert.deepEqual(A.unusedGivens(q, steps), [1275]);
+  assert.deepEqual(A.unusedGivens('Bought 1,250 at $18.40 and 875 at $19.15. Average? A) $18.71 B) $18.78', [{ name: 'a', expr: '(1250*18.40+875*19.15)/(1250+875)' }]), []);
+  assert.deepEqual(A.unusedGivens(q, []), []);
+});
+
+test('ties go to the attempt that left out fewer of the question\'s numbers', () => {
+  const g = A.tally([
+    { answer: '11,775.68', confidence: 9, unused: [1275] },
+    { answer: '10,500.68', confidence: 7, unused: [] },
+  ]);
+  assert.equal(g[0].members[0].answer, '10,500.68');
+});
+
+test('answers with several numbers agree when the numbers match, whatever the labels', () => {
+  assert.ok(A.answersEquivalent({ answer: '26 cm, 40 cm²', full: 'a) 26 cm\nb) 40 cm²' }, { answer: 'a) 26 cm, b) 40 cm²', full: '' }));
+  assert.ok(!A.answersEquivalent({ answer: '26 cm, 40 cm²' }, { answer: '26 cm, 42 cm²' }));
+});
