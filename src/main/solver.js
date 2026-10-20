@@ -138,7 +138,8 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
     // The model only sets up the calculations; Speck computes them exactly and fills in the numbers.
     // Multiple choice is then checked against the computed result.
-    const c = applySteps(A.normalizeResult(obj, r.content));
+    const n = A.normalizeResult(obj, r.content);
+    const c = applySteps({ ...n, full: A.keepFull(n) });
     return { ...A.checkChoice(c, c.question), unused: A.unusedGivens(c.question, c.calc), source };
   }
 
@@ -188,11 +189,9 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
   }
 
   // Tables and long answers are shown on hover, laid out like the task (never for multiple choice).
-  // Models sometimes fill "full" with a one-liner like "x = 5", or with just their calculation
-  // steps ("gross_profit: 33,512" ...) when one number was asked for: those still show directly.
-  const long = (s) => !!s && (/\n/.test(s) || s.length > 90);
+  // (one-liners and listed calculation steps were already dropped from "full" by keepFull)
   const table = best.choice ? [] : best.table || [];
-  const full = best.choice || table.length ? '' : [A.stepsEcho(best.full, best.calc) ? '' : best.full, best.answer].find(long) || '';
+  const full = best.choice || table.length ? '' : best.full || (A.isLong(best.answer) ? best.answer : '');
 
   return {
     answer,

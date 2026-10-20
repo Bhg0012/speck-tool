@@ -365,6 +365,17 @@ function stepsEcho(full, steps) {
   });
 }
 
+// Needs more than one short line.
+function isLong(s) {
+  return !!s && (/\n/.test(s) || s.length > 90);
+}
+
+// The multi-line answer worth keeping: none for multiple choice or a table, and not a one-liner
+// like "x = 5" or just the calculation steps listed again (models like to show their working).
+function keepFull(c) {
+  return c.choice || (c.table && c.table.length) || !isLong(c.full) || stepsEcho(c.full, c.calc) ? '' : c.full;
+}
+
 // What gets copied: a table as tab-separated rows (pastes into a spreadsheet as a table),
 // a multi-line answer as is, otherwise the short answer.
 function answerText(r) {
@@ -380,6 +391,8 @@ module.exports = {
   checkChoice,
   stepsEcho,
   unusedGivens,
+  isLong,
+  keepFull,
   numbersClose,
   normalizeTable,
   normalizeFull,

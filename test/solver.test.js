@@ -255,6 +255,26 @@ test('one asked-for number still shows directly even if the model lists its step
   }
 });
 
+test('attempts that agree on the answer agree, even if each listed its working differently', async () => {
+  const calc = [
+    { name: 'subtotal', expr: '37 * 24.95 + 112 * 8.49 + 9 * 149.99' },
+    { name: 'total', expr: 'subtotal * 1.0725' },
+  ];
+  const workings = ['subtotal: 3223.94\ntotal: 3457.68', 'subtotal: 3,224\ntotal: 3,457.67'];
+  let n = 0;
+  const reply = () => ans('${total:2}', { calc, full: workings[n++ % 2] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, '$3,457.68');
+    assert.equal(r.agreement, '2/2');
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+  } finally {
+    srv.close();
+  }
+});
+
 test('multiple choice: a wrong letter is corrected by the exact calculation', async () => {
   const q = 'Total cost of 12 items at $14.75? A) $165.00 B) $177.00 C) $187.50 D) $170.25';
   const reply = () => ans('A) $165.00', { question: q, choice: 'A', calc: [{ name: 'total', expr: '12 * 14.75' }] });
