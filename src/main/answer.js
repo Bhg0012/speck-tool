@@ -2,6 +2,7 @@
 // Pure helpers for parsing model output, comparing answers and scoring confidence.
 // No Electron or network code here, so it is unit-tested directly (test/answer.test.js).
 const { evaluate } = require('./mathcheck');
+const { normalizeSteps } = require('./calc');
 
 // "B) ...", "(b) ...", "C. ...", "2) ..." - an option label at the start of an answer.
 const LABEL_RE = /^\s*\(?([A-Ha-h]|[1-9])[).:]\s+/;
@@ -102,6 +103,7 @@ function normalizeResult(obj, rawText = '') {
     confidence: clampConf(obj.confidence),
     note: str(obj.note).slice(0, 140),
     question: str(obj.question).slice(0, 2000),
+    calc: normalizeSteps(obj.calc),
     parsed: true,
   };
 }
@@ -262,6 +264,7 @@ function scoreConfidence({ groups, total, math = null, legibility = 'good' }) {
     c = Math.min(mean, 3);
   }
   if (math === 'fail') c = Math.min(c, 4);
+  if (math === 'nomatch') c = Math.min(c, 5); // the exact result matches none of the options
   if (legibility === 'partial') c = Math.min(c, 7);
   if (legibility === 'poor') c = Math.min(c, 4);
   return clampConf(Math.floor(c));
@@ -278,6 +281,56 @@ function parseReader(text) {
   };
 }
 
+// Answer options in a question's text: "A) 30 B) 36 C) 40" or "(a) ... (b) ...".
+// Returns { A: '30', B: '36', ... } for the longest A, B, C... run, or {} if there isn't one.
+function optionsFrom(text) {
+  const t = str(text);
+  const marks = [...t.matchAll(/(?:^|[\s([])\(?([A-Ha-h])[).:\]]\s+/g)].map((m) => ({
+    letter: m[1].toUpperCase(),
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
+  let best = [];
+  let run = [];
+  for (const m of marks) {
+    if (m.letter === 'A') run = [m];
+    else if (run.length && m.letter.charCodeAt(0) === run[run.length - 1].letter.charCodeAt(0) + 1) run.push(m);
+    else continue;
+    if (run.length > best.length) best = run.slice();
+  }
+  if (best.length < 2) return {};
+  const out = {};
+  best.forEach((m, i) => {
+    out[m.letter] = t.slice(m.end, i + 1 < best.length ? best[i + 1].start : undefined).trim();
+  });
+  return out;
+}
+
+// Which options show this computed value (allowing the option's own rounding, and percents).
+function optionsMatching(options, value) {
+  const exact = { value, decimals: Infinity };
+  return Object.keys(options).filter((label) => {
+    const text = options[label];
+    return allNumbers(text).some(
+      (n) => numbersClose(exact, n) || (text.includes('%') && numbersClose({ value: value * 100, decimals: Infinity }, n)),
+    );
+  });
+}
+
+// Multiple choice: the option is picked by the exactly computed result, not the model's guess.
+// - one option matches the result: that's the choice (corrected if the model picked another)
+// - none matches: the setup or the reading is probably wrong ('nomatch' lowers confidence)
+function checkChoice(c, question) {
+  if (!c.choice || c.choice.includes(',') || c.finalValue === null || c.finalValue === undefined) return c;
+  const options = optionsFrom(question);
+  if (Object.keys(options).length < 2) return c;
+  const hits = optionsMatching(options, c.finalValue);
+  if (!hits.length) return { ...c, math: 'nomatch' };
+  if (hits.length > 1 || hits[0] === c.choice) return c;
+  const label = hits[0];
+  return { ...c, choice: label, answer: `${label}) ${options[label]}`, corrected: `picked ${label}: it matches the exact calculation` };
+}
+
 // What gets copied: a table as tab-separated rows (pastes into a spreadsheet as a table),
 // a multi-line answer as is, otherwise the short answer.
 function answerText(r) {
@@ -288,6 +341,10 @@ function answerText(r) {
 
 module.exports = {
   parseJsonLoose,
+  optionsFrom,
+  optionsMatching,
+  checkChoice,
+  numbersClose,
   normalizeTable,
   normalizeFull,
   answerText,

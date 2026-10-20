@@ -107,10 +107,11 @@ computer's graphics card, memory, Ollama setup and how long each step of recent 
 Speck never trusts a single answer. In the default **Careful** mode:
 
 1. The vision model **solves the framed question twice, independently** (the second time with a different method), copying the question exactly and showing short working.
-2. If the two answers disagree, a **tie-breaker** attempt decides by majority.
-3. Numeric answers are **re-computed** with a built-in calculator.
+2. **The model never does arithmetic.** It only sets up each calculation as a named step (`cogs = 1250 * 18.40`), and Speck computes every step with an **exact calculator** (exact to the cent, no rounding slips) and fills in the numbers.
+3. **Multiple choice** is matched against the exact result: the option showing that number is picked, even if the model guessed another letter.
+4. If the two answers disagree (for a table, if any cell differs), a **tie-breaker** attempt decides by majority.
 
-The **confidence score (x/10)** reflects how many independent attempts agreed, the arithmetic re-check, the models' own certainty, and how legible the capture was. Anything below about 7 means "double-check this yourself".
+The **confidence score (x/10)** reflects how many independent attempts agreed, the exact calculation (a result that matches none of the options caps it at 5), the models' own certainty, and how legible the capture was. Anything below about 7 means "double-check this yourself".
 
 | Mode | What it does |
 | --- | --- |

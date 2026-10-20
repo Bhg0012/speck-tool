@@ -118,3 +118,32 @@ test('copying gives a table as tab-separated rows, else the full or short answer
   assert.equal(A.answerText({ answer: 'a) 12', full: 'a) 12\nb) 30', table: [] }), 'a) 12\nb) 30');
   assert.equal(A.answerText({ answer: '42' }), '42');
 });
+
+test('answer options are read from the question text', () => {
+  assert.deepEqual(A.optionsFrom('What is 15% of 240? A) 30 B) 36 C) 40 D) 24'), { A: '30', B: '36', C: '40', D: '24' });
+  assert.deepEqual(A.optionsFrom('(a) $1,250.00 (b) $1,520.00 (c) None'), { A: '$1,250.00', B: '$1,520.00', C: 'None' });
+  assert.deepEqual(A.optionsFrom('No options here.'), {});
+});
+
+test('multiple choice is picked by the exact result', () => {
+  const q = 'Net income? A) $1,250.00 B) $1,520.00 C) $2,150.00 D) $1,502.00';
+  // the model picked A, but its own exact calculation gives 1,520 -> B
+  const fixed = A.checkChoice({ choice: 'A', answer: 'A) $1,250.00', finalValue: 1520, math: 'pass' }, q);
+  assert.equal(fixed.choice, 'B');
+  assert.equal(fixed.answer, 'B) $1,520.00');
+  // matches the model's pick: unchanged
+  assert.equal(A.checkChoice({ choice: 'B', answer: 'B) $1,520.00', finalValue: 1520, math: 'pass' }, q).answer, 'B) $1,520.00');
+  // matches nothing: flagged, which lowers confidence
+  assert.equal(A.checkChoice({ choice: 'B', answer: 'B', finalValue: 1600, math: 'pass' }, q).math, 'nomatch');
+  // percent options
+  assert.equal(A.checkChoice({ choice: 'A', answer: 'A', finalValue: 0.25 }, 'Rate? A) 20% B) 25% C) 30%').choice, 'B');
+  // options rounded to whole numbers still match
+  assert.equal(A.checkChoice({ choice: 'C', answer: 'C', finalValue: 36.8131 }, 'Margin? A) 35 B) 37 C) 40').choice, 'B');
+});
+
+test('an exact result that matches no option caps confidence at 5', () => {
+  const g = [{ members: [{ confidence: 9 }, { confidence: 9 }] }];
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'pass' }), 10);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'nomatch' }), 5);
+  assert.equal(A.scoreConfidence({ groups: g, total: 2, math: 'fail' }), 4);
+});

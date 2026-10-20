@@ -104,8 +104,18 @@ philosophy.
 | **Max** (deep hotkey) | Three independent attempts; tie-break if there's no majority. |
 
 Each attempt copies the question exactly and shows short working before the answer. Confidence
-(1-10) combines the model's own confidence, **agreement between independent attempts**, and an
-**arithmetic re-computation** of numeric answers. Disagreement always pulls the score down.
+(1-10) combines the model's own confidence, **agreement between independent attempts**, and the
+**exact calculation**. Disagreement always pulls the score down.
+
+**The model never does arithmetic.** Small local models are poor at multiplication and long
+sums (an accounting question went badly), so each attempt only *sets up* the math as named steps
+(`cogs = 1250 * 18.40`, `gross = sales - cogs`) and writes `{gross:2}` where the number goes.
+Speck computes every step with an exact calculator (`src/main/calc.js`: exact fractions, so money
+is right to the cent; rounding half away from zero) and fills the numbers in. Then:
+- the two independent attempts must agree on the computed numbers (every cell of a table);
+- for multiple choice, the option that matches the exact result is picked, correcting the
+  model's letter if needed; a result that matches no option caps confidence at 5;
+- a step that can't be computed shows "?" (never a wrong number) and caps confidence at 4.
 
 ## 5. Design language
 
@@ -200,3 +210,9 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   in, multi-part questions. Those answers don't show at the bottom; instead a short "Hover to see the
   full answer". And the answer must be **formatted like the question in the capture zone**: a table
   to fill in comes back as that table, not a long string of text.
+- **2026-10-20** - "Speck is really bad at doing math": an accounting question with simple
+  multiplication and addition came back wrong with low confidence (ChatGPT did it easily). Math
+  must be **as accurate as possible**, double and triple checked. Fix: the model never does
+  arithmetic; it sets up named calculation steps and Speck computes them exactly (like ChatGPT
+  running code, but built in and safe, no Python needed); multiple choice is matched against the
+  exact result; independent attempts must agree on the computed numbers.

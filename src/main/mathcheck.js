@@ -105,8 +105,9 @@ function parse(tokens) {
     if (tok.t === '(') { pos++; const v = expr(); eat(')'); return v; }
     if (tok.t === 'id') {
       pos++;
-      if (tok.v in CONSTS && !(peek() && peek().t === '(')) return CONSTS[tok.v];
-      const fn = FUNCS[tok.v];
+      const own = (o) => Object.prototype.hasOwnProperty.call(o, tok.v);
+      if (own(CONSTS) && !(peek() && peek().t === '(')) return CONSTS[tok.v];
+      const fn = own(FUNCS) ? FUNCS[tok.v] : null;
       if (!fn) throw new Error(`Unknown "${tok.v}"`);
       eat('(');
       const args = [expr()];

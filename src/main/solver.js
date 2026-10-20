@@ -11,6 +11,7 @@
 // - identical system prompt + screenshot first in every attempt, so the image is processed once
 // - instruct (non-thinking) vision model by default; working is short and visible in JSON
 const A = require('./answer');
+const { applySteps } = require('./calc');
 const P = require('./prompts');
 const { DEFAULT_READER } = require('../shared/defaults');
 
@@ -132,7 +133,10 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     }
     calls.push({ step: source, model: m.solver, ...r.stats });
     const obj = A.parseJsonLoose(r.content) || A.parseJsonLoose(r.thinking);
-    return { ...A.normalizeResult(obj, r.content), source };
+    // The model only sets up the calculations; Speck computes them exactly and fills in the numbers.
+    // Multiple choice is then checked against the computed result.
+    const c = applySteps(A.normalizeResult(obj, r.content));
+    return { ...A.checkChoice(c, c.question), source };
   }
 
   onStatus('solving');
@@ -161,8 +165,10 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
 
   const winners = groups[0].members;
   const best = winners[0];
+  // Exact-calculation status of the winning answer: any broken step or option mismatch counts.
+  const statuses = winners.map((c) => c.math).filter(Boolean);
   const checked = winners.find((c) => c.check) || best;
-  const math = A.mathCheck(checked);
+  const math = ['fail', 'nomatch', 'pass'].find((m) => statuses.includes(m)) || A.mathCheck(checked);
   const confidence = A.scoreConfidence({ groups, total, math, legibility });
 
   // Multiple choice: always show the letter, e.g. "C) 75".
@@ -182,11 +188,12 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     table,
     full,
     choice: best.choice || '',
-    note: best.note || winners.map((c) => c.note).find(Boolean) || '',
+    note: winners.map((c) => c.corrected).find(Boolean) || best.note || winners.map((c) => c.note).find(Boolean) || '',
     question: best.question || candidates.map((c) => c.question).find(Boolean) || '',
     confidence,
     agreement: `${winners.length}/${total}`,
     math,
+    calc: best.calc || [],
     mode,
     models,
     calls,

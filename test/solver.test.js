@@ -160,6 +160,55 @@ test('a one-line "full" answer still shows directly', async () => {
   }
 });
 
+test('the model never does the arithmetic: Speck computes its steps exactly', async () => {
+  // Both attempts set up the right calculation; the "work" mental math is wrong and is ignored.
+  const reply = () =>
+    ans('Net income ${net:2}', {
+      work: 'revenue minus expenses = 31,000 (wrong mental math)',
+      calc: [
+        { name: 'revenue', expr: '1,250 * 48.60' },
+        { name: 'expenses', expr: '18,420.75 + 9,315.40 + 0.1 + 0.2' },
+        { name: 'net', expr: 'revenue - expenses' },
+      ],
+    });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, 'Net income $33,013.55');
+    assert.equal(r.math, 'pass');
+    assert.equal(r.confidence, 10);
+    assert.ok(srv.calls[0].format.required.includes('calc'), 'the model is asked for calculation steps');
+  } finally {
+    srv.close();
+  }
+});
+
+test('multiple choice: a wrong letter is corrected by the exact calculation', async () => {
+  const q = 'Total cost of 12 items at $14.75? A) $165.00 B) $177.00 C) $187.50 D) $170.25';
+  const reply = () => ans('A) $165.00', { question: q, choice: 'A', calc: [{ name: 'total', expr: '12 * 14.75' }] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(r.answer, 'B) $177.00');
+    assert.equal(r.choice, 'B');
+    assert.match(r.note, /exact calculation/);
+  } finally {
+    srv.close();
+  }
+});
+
+test('a calculation that breaks never shows a confident number', async () => {
+  const reply = () => ans('{total}', { calc: [{ name: 'total', expr: 'price * qty' }] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'fast');
+    assert.equal(r.answer, '?');
+    assert.ok(r.confidence <= 4);
+  } finally {
+    srv.close();
+  }
+});
+
 test('old thinking model setting still works and turns thinking off', async () => {
   const srv = await fakeOllama({ models: ['qwen3-vl:8b'], caps: CAPS, reply: () => ans('7') });
   try {

@@ -6,19 +6,22 @@ const SOLVER = `You are Speck, a precise answer engine. The image is a region of
 
 Accuracy is the top priority:
 - Read every word, number, sign and unit exactly. Re-read the question for traps: units, NOT/EXCEPT, "select all", rounding, the requested form of the answer.
-- Work step by step and check each calculation. For multiple choice, check every option.
+- NEVER do arithmetic yourself, not even simple sums. Write every calculation as a step in "calc"; Speck computes them exactly. Wherever a calculated number belongs in your answer, write its step name in braces: {name}, or {name:2} for 2 decimal places (money).
+- For multiple choice, check every option.
 - If something is cut off or unreadable, still give your best answer and lower your confidence.
 
 Reply with ONLY a JSON object with these keys, in this order:
-- "question": the question and its answer options, copied exactly but briefly (max 40 words)
-- "work": your working in at most 4 short steps (only what is needed to be sure)
-- "table": [] unless the task is a table, chart or grid to fill in. Then the WHOLE table exactly as laid out in the screenshot: an array of rows, each an array of cell texts, header row first, same rows, columns and order, given cells copied and empty cells filled in
-- "full": "" for multiple choice, a table, or an answer that fits on one short line. Otherwise (several parts or blanks, a list, steps asked for, a written response) the complete answer as plain text laid out like the task: one line per part or blank, labelled as in the task (e.g. "a) 12 cm"); no markdown; at most 20 lines
+- "question": the question and ALL its answer options with their labels, copied exactly (max 80 words)
+- "work": the method in at most 3 short steps (which rule or formula, which numbers); no arithmetic
+- "calc": every calculation in order, as [{"name": "short_name", "expr": "expression"}]. Copy numbers exactly as shown (no rounding); use + - * / ^ ( ) %, round(x, 2), sqrt, min, max and the names of earlier steps. The last step is the final result. [] if nothing needs calculating
+- "table": [] unless the task is a table, chart or grid to fill in. Then the WHOLE table exactly as laid out in the screenshot: an array of rows, each an array of cell texts, header row first, same rows, columns and order, given cells copied and empty cells filled in (calculated cells as {name})
+- "full": "" for multiple choice, a table, or an answer that fits on one short line. Otherwise (several parts or blanks, a list, steps asked for, a written response) the complete answer as plain text laid out like the task: one line per part or blank, labelled as in the task (e.g. "a) {perimeter} cm"); no markdown; at most 20 lines
 - "answer": the final answer only, as short as possible: a number with units, a word, a short phrase, the option such as "B) 42", or one short sentence. For code, only the corrected line(s). With a table or full answer: a summary of at most 8 words
 - "choice": the option label(s) you picked, e.g. "B" or "A,C"; "" if not multiple choice
-- "check": if the answer is a single number, one plain arithmetic expression (digits, + - * / ^, parentheses, sqrt) that evaluates to it; otherwise ""
 - "confidence": integer 1-10 (10 = certain and verified, 7 = very likely, 4 = unsure, 1 = guess)
-- "note": at most 10 words: the key rule or formula; "" if not useful`;
+- "note": at most 10 words: the key rule or formula; "" if not useful
+
+Example: "calc": [{"name": "cogs", "expr": "1250 * 18.40"}, {"name": "gross", "expr": "52000 - cogs"}], "answer": "\${gross:2}"`;
 
 const FIRST = 'Solve the task in this screenshot.';
 
@@ -27,7 +30,7 @@ const SECOND = `Solve the task in this screenshot independently, from scratch. U
 const tiebreak = (answers) =>
   `Solve the task in this screenshot from scratch, very carefully. Earlier attempts disagreed (${answers
     .map((a) => `"${a}"`)
-    .join(' vs ')}); they may all be wrong. Re-read the question exactly, work it out step by step, and double-check the arithmetic before answering.`;
+    .join(' vs ')}); they may all be wrong. Re-read the question exactly, copy every number again from the screenshot, set up each calculation step by step in "calc", and check the method before answering.`;
 
 // Text-only solvers (e.g. gpt-oss) can't see the image, so a vision model transcribes it first.
 const READER = `You transcribe a region of the user's screen so another model can answer it without seeing the image.
@@ -43,15 +46,18 @@ const SOLVE_SCHEMA = {
   properties: {
     question: { type: 'string' },
     work: { type: 'string' },
+    calc: {
+      type: 'array',
+      items: { type: 'object', properties: { name: { type: 'string' }, expr: { type: 'string' } }, required: ['name', 'expr'] },
+    },
     table: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
     full: { type: 'string' },
     answer: { type: 'string' },
     choice: { type: 'string' },
-    check: { type: 'string' },
     confidence: { type: 'integer' },
     note: { type: 'string' },
   },
-  required: ['question', 'work', 'table', 'full', 'answer', 'choice', 'check', 'confidence', 'note'],
+  required: ['question', 'work', 'calc', 'table', 'full', 'answer', 'choice', 'confidence', 'note'],
 };
 
 module.exports = { SOLVER, FIRST, SECOND, tiebreak, READER, SOLVE_SCHEMA };

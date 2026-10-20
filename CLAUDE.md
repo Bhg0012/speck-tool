@@ -11,6 +11,7 @@ When Bruce shares a new idea, preference or insight in a chat:
 ## Project map
 - `src/main/` - Electron main process (windows, hotkeys, capture, Ollama, solver pipeline).
   - `solver.js` - read, then solve, then verify, then confidence. `answer.js` and `mathcheck.js` are pure and unit-tested.
+  - `calc.js` - exact calculator for the model's calculation steps (the model never does arithmetic; pure, unit-tested).
 - `src/renderer/` - overlay UI (corner markers, dot button, answer bar) and settings window.
 - `src/shared/defaults.js` - default settings plus the settings file location (used by the app and the launcher).
 - `scripts/start.js` - cross-platform launcher logic (update, deps, Ollama, model pull, start).
