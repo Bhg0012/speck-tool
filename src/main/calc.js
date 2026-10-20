@@ -440,7 +440,8 @@ function applySteps(c) {
     const typed = (t) => literals(String(t || '').replace(PLACEHOLDER_RE, ''));
     PLACEHOLDER_RE.lastIndex = 0;
     // The answer itself may not round a result off unless the question asks for rounding.
-    const stray = typed(c.answer).filter((l) => !accountedFor(l, known, !mayRound));
+    // Multiple choice shows the option as printed; checkChoice matches it to the exact result.
+    const stray = c.choice ? [] : typed(c.answer).filter((l) => !accountedFor(l, known, !mayRound));
     if (!c.choice && !answerUsed.length && stray.length === 1 && literals(answer).length === 1 && final) {
       // The one number in the answer isn't any computed value: show the exact final result instead.
       const lit = literals(answer)[0];

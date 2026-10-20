@@ -146,3 +146,10 @@ test('typed numbers in a table or long answer that match no calculation lower co
   const bad = C.applySteps({ question: q, answer: 'done', full: '', calc: steps, table: [['Year', 'Dep', 'Acc'], ['1', '{dep}', '8400'], ['2', '{dep}', '16,900']] });
   assert.equal(bad.math, 'unverified');
 });
+
+test('multiple choice answers keep the option as printed (the option check covers them)', () => {
+  const steps = [{ name: 'avg', expr: '(1250*18.40 + 875*19.15) / (1250 + 875)' }];
+  const r = C.applySteps({ question: 'Average? A) $18.71 B) $18.78', answer: 'A) $18.71', choice: 'A', full: '', table: [], calc: steps });
+  assert.equal(r.answer, 'A) $18.71');
+  assert.equal(r.math, 'pass');
+});
