@@ -69,6 +69,7 @@ once GitHub access works.
 
 - While Speck works, **only the dot pulses**. Nothing appears at the bottom until the answer is ready.
 - **Hover** the answer to see the full text and a short note. **Click** it to copy, **right-click** it to dismiss.
+- **Tables, multi-part problems and longer answers** show only *Hover to see the full answer* at the bottom. Hover it to see the answer laid out like the question: a table to fill in comes back as that table with the blanks filled in, parts one per line (a), b), ...). Click copies it the same way; a table pastes into a spreadsheet as rows and columns. Multiple choice and short answers still show directly.
 - **Ghost mode:** while everything is hidden, the Ask hotkey still works. Only the tiny answer appears.
 - **History:** the last 30 questions and answers, newest first, each with a **Copy** button that copies the whole question and answer. Older entries are deleted automatically. It's text only (about 1 KB each, roughly 30 KB in total) and stays on this computer. Use **Clear** to wipe it, or turn history off in Settings.
 - Drag the dot anywhere you like. Speck remembers the positions.

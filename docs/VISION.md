@@ -76,6 +76,12 @@ philosophy.
   a black background. (Other themes are available in settings.)
 - Format: `answer   9/10`.
 - Hover to see the full answer plus a few-word note. Click to copy.
+- **Multiple choice and short answers show directly** (`B) 42   9/10`, `x = 5   10/10`).
+- **Anything bigger stays tucked away**: a table/chart to fill in, several parts or blanks, or a
+  written answer shows only `Hover to see the full answer   9/10`. Hovering reveals it **laid out
+  like the task**: a table comes back as a real table (same rows, columns and headers, with the
+  blanks filled in), parts and blanks one per line with their labels. Click copies it the same way
+  (a table copies as rows and columns, so it pastes into a spreadsheet as a table). History keeps it.
 
 ### Hide everything
 - A global key combination makes **everything disappear** (markers, button, answer).
@@ -190,3 +196,7 @@ Newest at the bottom. Add an entry every time Bruce shares a new vision, prefere
   tint filled each bracket/dot window so it could be clicked. Removed: nothing is drawn behind the
   marks now (the Mac window is told to take clicks anyway; only a 1/255 grab area hugs each mark).
   **No hue, box or tint around any mark, ever, on any OS.**
+- **2026-10-20** - Speck must handle more than multiple choice: problems, charts or tables to fill
+  in, multi-part questions. Those answers don't show at the bottom; instead a short "Hover to see the
+  full answer". And the answer must be **formatted like the question in the capture zone**: a table
+  to fill in comes back as that table, not a long string of text.

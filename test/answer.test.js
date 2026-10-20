@@ -86,3 +86,35 @@ test('parseReader', () => {
   assert.equal(r.legibility, 'partial');
   assert.equal(A.parseReader('hello').legibility, 'good');
 });
+
+test('tables are tidied into equal-width rows; non-tables become []', () => {
+  assert.deepEqual(A.normalizeTable([['x', 'y'], ['1'], ['2', 4]]), [['x', 'y'], ['1', ''], ['2', '4']]);
+  assert.deepEqual(A.normalizeTable([['only a header']]), []);
+  assert.deepEqual(A.normalizeTable('not a table'), []);
+  assert.deepEqual(A.normalizeTable([['', ''], ['', '']]), []);
+  const r = A.normalizeResult({ answer: 'Table filled', table: [['x', 'y'], ['1', '3']], full: ' a) 12 \n\n\n b)  30 ' });
+  assert.deepEqual(r.table, [['x', 'y'], ['1', '3']]);
+  assert.equal(r.full, 'a) 12\n\nb) 30');
+});
+
+test('tables agree when their numbers match in order, not by their summaries', () => {
+  const t = (rows, answer = 'Completed table') => ({ answer, table: rows });
+  const a = t([['x', 'y = 2x + 1'], ['1', '3'], ['2', '5'], ['3', '7']]);
+  const same = t([['x', 'y=2x+1'], ['1', '3.0'], ['2', '5'], ['3', '7']], 'All values filled');
+  const wrong = t([['x', 'y = 2x + 1'], ['1', '3'], ['2', '5'], ['3', '8']]);
+  assert.ok(A.answersEquivalent(a, same));
+  assert.ok(!A.answersEquivalent(a, wrong), 'same summary, different cell -> disagree');
+  assert.equal(A.tally([a, same, wrong])[0].members.length, 2);
+});
+
+test('multi-part answers agree by their numbers; written ones fall back to the summary', () => {
+  assert.ok(A.answersEquivalent({ answer: 'a) 12, b) 30', full: 'a) 12 cm\nb) 30 cm' }, { answer: '12 and 30', full: 'a) 12cm\nb) 30 cm' }));
+  assert.ok(!A.answersEquivalent({ answer: 'x', full: 'a) 12\nb) 30' }, { answer: 'x', full: 'a) 12\nb) 31' }));
+  assert.ok(A.answersEquivalent({ answer: 'Photosynthesis', full: 'Plants make sugar from light.' }, { answer: 'photosynthesis', full: 'Light energy is turned into glucose by plants.' }));
+});
+
+test('copying gives a table as tab-separated rows, else the full or short answer', () => {
+  assert.equal(A.answerText({ answer: 'done', table: [['x', 'y'], ['1', '3']] }), 'x\ty\n1\t3');
+  assert.equal(A.answerText({ answer: 'a) 12', full: 'a) 12\nb) 30', table: [] }), 'a) 12\nb) 30');
+  assert.equal(A.answerText({ answer: '42' }), '42');
+});

@@ -3,6 +3,7 @@
 // (no screenshots). About 1 KB per entry, so 30 entries is roughly 30 KB.
 const fs = require('fs');
 const path = require('path');
+const { answerText, normalizeTable } = require('./answer');
 
 const LIMIT = 30;
 
@@ -27,11 +28,13 @@ class History {
     return this.items;
   }
 
-  add({ question = '', answer, confidence, mode, agreement }) {
+  add({ question = '', answer, table = [], full = '', confidence, mode, agreement }) {
     const entry = {
       at: new Date().toISOString(),
       question: String(question).slice(0, 2000),
       answer: String(answer).slice(0, 2000),
+      ...(table.length ? { table: normalizeTable(table) } : {}),
+      ...(full ? { full: String(full).slice(0, 3000) } : {}),
       confidence,
       mode,
       agreement,
@@ -61,7 +64,9 @@ class History {
 // What the Copy button puts on the clipboard.
 function entryText(e) {
   const conf = e.confidence ? ` (${e.confidence}/10)` : '';
-  return e.question ? `Question: ${e.question}\nAnswer: ${e.answer}${conf}` : `Answer: ${e.answer}${conf}`;
+  const a = answerText(e);
+  const answer = a.includes('\n') ? `\n${a}` : ` ${a}`; // a table or multi-line answer starts on its own line
+  return e.question ? `Question: ${e.question}\nAnswer:${answer}${conf}` : `Answer:${answer}${conf}`;
 }
 
 module.exports = { History, entryText, LIMIT };

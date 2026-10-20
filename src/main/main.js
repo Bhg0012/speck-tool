@@ -23,6 +23,7 @@ const { recommend } = require('../shared/speed');
 const { Ollama } = require('./ollama');
 const { solve, resolveModels, NUM_CTX } = require('./solver');
 const { captureRegion } = require('./capture');
+const { answerText } = require('./answer');
 const monitors = require('./monitors');
 const { RECOMMENDED_MODELS, settingsFile } = require('../shared/defaults');
 const { readVersionInfo, versionLabels } = require('../shared/version');
@@ -37,7 +38,7 @@ const HANDLE = 28; // corner marker window size
 const PAD = 7; // where the bracket's corner sits inside the marker window
 const DOT = 22; // capture button window size
 const CLICK_SLOP = 6; // a press that moves less than this (px) on the dot is a click, not a drag
-const BAR_H = 150; // answer bar window height (room for the hover-expanded answer)
+const BAR_H = 420; // answer bar window height (room for a hover-expanded table or long answer)
 
 app.setName('Speck');
 app.setPath('userData', path.dirname(settingsFile()));
@@ -665,7 +666,7 @@ async function speedTest() {
 
 function copyAnswer() {
   if (!lastResult) return;
-  clipboard.writeText(lastResult.answer);
+  clipboard.writeText(answerText(lastResult)); // a table copies as rows and columns
   send(win.bar, 'bar', { kind: 'copied' });
 }
 

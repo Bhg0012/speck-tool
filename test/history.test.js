@@ -34,4 +34,5 @@ test('clear empties it; a corrupt file starts fresh', () => {
 test('copy text includes the whole question and answer', () => {
   assert.equal(entryText({ question: 'What is 2+2?', answer: '4', confidence: 10 }), 'Question: What is 2+2?\nAnswer: 4 (10/10)');
   assert.equal(entryText({ question: '', answer: 'Paris' }), 'Answer: Paris');
+  assert.equal(entryText({ question: 'Fill in', answer: 'done', table: [['x', 'y'], ['1', '3']], confidence: 9 }), 'Question: Fill in\nAnswer:\nx\ty\n1\t3 (9/10)');
 });
