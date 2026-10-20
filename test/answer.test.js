@@ -155,3 +155,22 @@ test('a "full" answer that only lists the calculation steps is recognised', () =
   assert.ok(!A.stepsEcho('a) Perimeter: 26 cm\nb) Area: 40 cm²', [{ name: 'perimeter' }, { name: 'area' }]));
   assert.ok(!A.stepsEcho('gross_profit: 33,512', steps), 'one line is not a list');
 });
+
+test('numbers from the question that no calculation uses are found (not options, not percents used as fractions)', () => {
+  const q = 'Sales $84,750; COGS $51,238; operating expenses $18,945; interest expense $1,275; tax rate 21%.';
+  const steps = [
+    { name: 'op', expr: '84750 - 51238 - 18945' },
+    { name: 'tax', expr: 'op * 0.21' },
+  ];
+  assert.deepEqual(A.unusedGivens(q, steps), [1275]);
+  assert.deepEqual(A.unusedGivens('Bought 1,250 at $18.40 and 875 at $19.15. Average? A) $18.71 B) $18.78', [{ name: 'a', expr: '(1250*18.40+875*19.15)/(1250+875)' }]), []);
+  assert.deepEqual(A.unusedGivens(q, []), []);
+});
+
+test('ties go to the attempt that left out fewer of the question\'s numbers', () => {
+  const g = A.tally([
+    { answer: '11,775.68', confidence: 9, unused: [1275] },
+    { answer: '10,500.68', confidence: 7, unused: [] },
+  ]);
+  assert.equal(g[0].members[0].answer, '10,500.68');
+});

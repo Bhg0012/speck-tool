@@ -401,10 +401,12 @@ function literals(text) {
 
 // A typed number is accounted for if it's a computed value or a number from the question
 // (compared at the typed number's own precision), or a small label like "1" or "a) 2".
-function accountedFor(lit, known) {
+// `exact`: the typed number must show the value exactly (no rounding it off).
+function accountedFor(lit, known, exact = false) {
   if (Number.isInteger(lit.value) && Math.abs(lit.value) <= 20) return true;
   const k = 10 ** Math.min(lit.places, 10);
-  return known.some((v) => Math.abs(Math.round(v * k) / k - lit.value) < 1e-9 * Math.max(1, Math.abs(v)));
+  const close = (a, b) => Math.abs(a - b) < 1e-9 * Math.max(1, Math.abs(a));
+  return known.some((v) => close(exact ? v : Math.round(v * k) / k, lit.value));
 }
 
 /**
@@ -437,7 +439,8 @@ function applySteps(c) {
     const known = [...Object.values(values).map(toFloat), ...literals(c.question).map((l) => l.value)];
     const typed = (t) => literals(String(t || '').replace(PLACEHOLDER_RE, ''));
     PLACEHOLDER_RE.lastIndex = 0;
-    const stray = typed(c.answer).filter((l) => !accountedFor(l, known));
+    // The answer itself may not round a result off unless the question asks for rounding.
+    const stray = typed(c.answer).filter((l) => !accountedFor(l, known, !mayRound));
     if (!c.choice && !answerUsed.length && stray.length === 1 && literals(answer).length === 1 && final) {
       // The one number in the answer isn't any computed value: show the exact final result instead.
       const lit = literals(answer)[0];
@@ -462,4 +465,4 @@ function applySteps(c) {
   };
 }
 
-module.exports = { evaluateExact, format, normalizeSteps, runSteps, applySteps, toFloat, isExact, roundTo, parseNumber };
+module.exports = { evaluateExact, format, normalizeSteps, runSteps, applySteps, literals, toFloat, isExact, roundTo, parseNumber };

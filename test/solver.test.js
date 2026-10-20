@@ -94,6 +94,59 @@ test('disagreement triggers a tie-break and lowers confidence', async () => {
   }
 });
 
+test('careful keeps solving until two attempts agree, telling it which numbers were left out', async () => {
+  const q = 'Sales $84,750, COGS $51,238, operating expenses $18,945, interest $1,275, tax 21%. Net income?';
+  const forgot = [
+    { name: 'op', expr: '84750 - 51238 - 18945' },
+    { name: 'net', expr: 'op - op * 0.21' },
+  ];
+  const right = [
+    { name: 'ebt', expr: '84750 - 51238 - 18945 - 1275' },
+    { name: 'net', expr: 'ebt * (1 - 0.21)' },
+  ];
+  const wrongTax = [{ name: 'net', expr: '84750 - 51238 - 18945 - 1275' }];
+  const plan = [forgot, right, wrongTax, right]; // 1st, 2nd, 3rd, 4th call
+  let n = 0;
+  const reply = () => ans('${net:2}', { question: q, calc: plan[n++] });
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(srv.calls.length, 4, 'three different answers -> a fourth attempt');
+    assert.match(srv.calls[2].messages[1].content, /never used 1275/);
+    assert.equal(r.answer, '$10,500.68');
+    assert.equal(r.agreement, '2/4');
+    assert.ok(r.confidence <= 5 && r.confidence >= 4);
+  } finally {
+    srv.close();
+  }
+});
+
+test('careful stops after 4 attempts even without agreement, with low confidence', async () => {
+  let n = 0;
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans(String(100 + n++)) });
+  try {
+    const r = await run(srv.url, 'careful');
+    assert.equal(srv.calls.length, 4);
+    assert.ok(r.confidence <= 3);
+  } finally {
+    srv.close();
+  }
+});
+
+test('max wants three agreeing attempts', async () => {
+  const answers = ['36', '35', '36', '36'];
+  let n = 0;
+  const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans(answers[n++]) });
+  try {
+    const r = await run(srv.url, 'max');
+    assert.equal(srv.calls.length, 4);
+    assert.equal(r.agreement, '3/4');
+    assert.equal(r.answer, '36');
+  } finally {
+    srv.close();
+  }
+});
+
 test('max: three attempts, tie-break only without a majority', async () => {
   const srv = await fakeOllama({ models: ['qwen3-vl:8b-instruct'], caps: CAPS, reply: () => ans('B) 42', { choice: 'B' }) });
   try {

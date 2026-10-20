@@ -3,8 +3,11 @@
 // compared and a tie-breaker runs only when they disagree.
 //
 //   fast:    1 attempt
-//   careful: 2 independent attempts (+ tie-break if they disagree)        <- default
-//   max:     3 independent attempts (+ tie-break if there's no majority)
+//   careful: 2 independent attempts; more (up to 4) until two agree       <- default
+//   max:     3 independent attempts; more (up to 6) until three agree
+//
+// The model never does arithmetic: each attempt sets up named calculation steps that calc.js
+// computes exactly, so attempts can only disagree on how they read or set up the problem.
 //
 // Speed rules (measured against real Ollama, see docs/PERFORMANCE.md):
 // - one num_ctx for every call, so Ollama never reloads the model mid-question
@@ -136,7 +139,7 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     // The model only sets up the calculations; Speck computes them exactly and fills in the numbers.
     // Multiple choice is then checked against the computed result.
     const c = applySteps(A.normalizeResult(obj, r.content));
-    return { ...A.checkChoice(c, c.question), source };
+    return { ...A.checkChoice(c, c.question), unused: A.unusedGivens(c.question, c.calc), source };
   }
 
   onStatus('solving');
@@ -147,14 +150,21 @@ async function solve({ image, settings, ollama, mode = 'careful', onStatus = () 
     candidates.push(await attempt(P.SECOND, { temperature: 0.4, seed: 7, source: 'second' }));
     if (mode === 'max') candidates.push(await attempt(P.SECOND, { temperature: 0.7, seed: 21, source: 'third' }));
 
-    const groups = A.tally(candidates);
-    const counted = candidates.filter((c) => c.answer).length;
-    const majority = groups[0] && groups[0].members.length > counted / 2;
-    const unanimous = groups.length === 1 && groups[0].members.length === counted;
-    if (mode === 'max' ? !majority : !unanimous) {
+    // Keep solving independently until enough attempts agree on the (exactly computed) answer
+    // and that answer is ahead of every other one.
+    const need = mode === 'max' ? 3 : 2;
+    const most = mode === 'max' ? 6 : 4;
+    const settled = () => {
+      const g = A.tally(candidates);
+      return g[0] && g[0].members.length >= need && (!g[1] || g[0].members.length > g[1].members.length);
+    };
+    const seeds = [13, 29, 43, 57];
+    for (let i = 0; candidates.length < most && !settled(); i++) {
       onStatus('tie-break');
-      const seen = groups.map((g) => g.members[0].answer).slice(0, 3);
-      candidates.push(await attempt(P.tiebreak(seen), { temperature: 0.2, seed: 13, source: 'tiebreak' }));
+      const seen = A.tally(candidates)
+        .slice(0, 3)
+        .map((g) => ({ answer: g.members[0].answer, unused: g.members[0].unused }));
+      candidates.push(await attempt(P.tiebreak(seen), { temperature: 0.2 + 0.1 * i, seed: seeds[i], source: `tiebreak${i + 1}` }));
     }
   }
 

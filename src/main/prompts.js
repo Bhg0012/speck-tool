@@ -27,10 +27,11 @@ const FIRST = 'Solve the task in this screenshot.';
 
 const SECOND = `Solve the task in this screenshot independently, from scratch. Use a different method or order than the most obvious one where possible, and verify by substitution or back-checking before answering.`;
 
-const tiebreak = (answers) =>
-  `Solve the task in this screenshot from scratch, very carefully. Earlier attempts disagreed (${answers
-    .map((a) => `"${a}"`)
-    .join(' vs ')}); they may all be wrong. Re-read the question exactly, copy every number again from the screenshot, set up each calculation step by step in "calc", and check the method before answering.`;
+// `seen`: [{ answer, unused: [numbers from the question its calculation never used] }]
+const tiebreak = (seen) =>
+  `Solve the task in this screenshot from scratch, very carefully. Earlier attempts disagreed (${seen
+    .map((s) => `"${s.answer}"${s.unused && s.unused.length ? ` (never used ${s.unused.join(', ')})` : ''}`)
+    .join(' vs ')}); they may all be wrong. Re-read the question exactly, copy every number again from the screenshot, decide for each given number whether it belongs in the calculation, set up each step in "calc", and check the method before answering.`;
 
 // Text-only solvers (e.g. gpt-oss) can't see the image, so a vision model transcribes it first.
 const READER = `You transcribe a region of the user's screen so another model can answer it without seeing the image.

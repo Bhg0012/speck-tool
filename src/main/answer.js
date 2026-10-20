@@ -2,7 +2,7 @@
 // Pure helpers for parsing model output, comparing answers and scoring confidence.
 // No Electron or network code here, so it is unit-tested directly (test/answer.test.js).
 const { evaluate } = require('./mathcheck');
-const { normalizeSteps } = require('./calc');
+const { normalizeSteps, literals } = require('./calc');
 
 // "B) ...", "(b) ...", "C. ...", "2) ..." - an option label at the start of an answer.
 const LABEL_RE = /^\s*\(?([A-Ha-h]|[1-9])[).:]\s+/;
@@ -219,7 +219,8 @@ function answersEquivalent(a, b) {
   return bare(ta) !== '' && bare(ta) === bare(tb);
 }
 
-// Groups candidate answers that mean the same thing; biggest (then most confident) group first.
+// Groups candidate answers that mean the same thing. Order: biggest group first, then the one
+// whose calculations left out fewer of the question's numbers, then the most confident.
 function tally(candidates) {
   const groups = [];
   for (const c of candidates) {
@@ -229,7 +230,8 @@ function tally(candidates) {
     else groups.push({ members: [c] });
   }
   const sum = (g) => g.members.reduce((s, m) => s + (m.confidence || 0), 0);
-  groups.sort((x, y) => y.members.length - x.members.length || sum(y) - sum(x));
+  const left = (g) => Math.min(...g.members.map((m) => (m.unused || []).length));
+  groups.sort((x, y) => y.members.length - x.members.length || left(x) - left(y) || sum(y) - sum(x));
   return groups;
 }
 
@@ -260,6 +262,8 @@ function scoreConfidence({ groups, total, math = null, legibility = 'good' }) {
     c = Math.min(10, mean + 1);
   } else if (agree / total >= 2 / 3) {
     c = Math.min(mean, 6);
+  } else if (agree >= 2 && (!groups[1] || agree > groups[1].members.length)) {
+    c = Math.min(mean, 5); // a clear plurality after extra attempts
   } else {
     c = Math.min(mean, 3);
   }
@@ -332,6 +336,22 @@ function checkChoice(c, question) {
   return { ...c, choice: label, answer: `${label}) ${options[label]}`, corrected: `picked ${label}: it matches the exact calculation` };
 }
 
+// Numbers given in the question that no calculation step uses: the classic slip of leaving
+// something out (e.g. forgetting the interest expense). Answer options are not counted, and a
+// percent counts as used when the step uses it as a fraction (21% -> 0.21).
+function unusedGivens(question, steps) {
+  if (!steps || !steps.length) return [];
+  let q = str(question);
+  if (Object.keys(optionsFrom(q)).length) {
+    const at = q.search(/(?:^|[\s([])\(?[Aa][).:\]]\s+/); // where option A starts
+    if (at >= 0) q = q.slice(0, at);
+  }
+  const given = literals(q).map((l) => l.value).filter((v) => !(Number.isInteger(v) && Math.abs(v) <= 20));
+  const used = steps.flatMap((s) => literals(s.expr.replace(/[$€£¥]/g, '')).map((l) => l.value));
+  const near = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a));
+  return [...new Set(given)].filter((v) => !used.some((u) => near(u, v) || near(u * 100, v) || near(u, v * 100)));
+}
+
 // True when a multi-line answer only lists the calculation steps ("gross_profit: 33,512"), i.e.
 // the model showed its working although a single result was asked for.
 function stepsEcho(full, steps) {
@@ -359,6 +379,7 @@ module.exports = {
   optionsMatching,
   checkChoice,
   stepsEcho,
+  unusedGivens,
   numbersClose,
   normalizeTable,
   normalizeFull,
